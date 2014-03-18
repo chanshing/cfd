@@ -75,20 +75,6 @@ MODULE MPRINTRES
   CHARACTER*4 RHOCHAR,VEL2CHAR,MACHCHAR,PRESCHAR,TEMPCHAR,ENERCHAR,POSCHAR
 END MODULE MPRINTRES
 
-MODULE MNEWMARK
- INTEGER NDIM
- REAL(8) , DIMENSION(:), ALLOCATABLE:: DIS,VEL,ACC
-END MODULE MNEWMARK
-
-MODULE MATRICES
-  REAL(8), DIMENSION(:,:), ALLOCATABLE:: M,C,K
-END MODULE MATRICES
-
-MODULE MAT2
-  REAL(8), DIMENSION(:), ALLOCATABLE:: DISS,VELS,ACCS,R,G,G1,F,CTE
-END MODULE MAT2
- 
-
 
 PROGRAM NSComp2D
   USE DATOS_REFINAMIENTO
@@ -105,7 +91,6 @@ PROGRAM NSComp2D
   USE MMOVIMIENTO
   USE MESTABILIZACION
   USE MPRINTRES
-  USE MNEWMARK
   IMPLICIT REAL(8) (A-H,O-Z)
   
   INTEGER IELEM_SETS(10),BANDERA,NESTAB
@@ -122,7 +107,7 @@ PROGRAM NSComp2D
   REAL(8) , DIMENSION(:), ALLOCATABLE:: DTL,DT
   ! CCCC NODOS VECINOS Y LAPLACIANO
   REAL(8) , DIMENSION(:), ALLOCATABLE::B,RES
-  REAL(8) , DIMENSION(:), ALLOCATABLE:: XPOS,YPOS,PK,APK,Z,POS_AUX,POS_AUY
+  REAL(8) , DIMENSION(:), ALLOCATABLE:: XPOS,YPOS,PK,APK,Z,POS_AUX
   ! CCCC REFINAMIENTO
   REAL(8) , DIMENSION(:), ALLOCATABLE:: HH_NEW
   
@@ -200,7 +185,7 @@ PROGRAM NSComp2D
   CALL ALLOC
   ALLOCATE(SMOOTH_SIM(2,NNOD))
   ALLOCATE(GAMM(NNOD),DTL(NELEM),DT(NELEM),B(NNOD),RES(NNOD))
-  ALLOCATE(XPOS(NNOD),YPOS(NNOD),PK(NNOD),APK(NNOD),Z(NNOD),POS_AUX(NNOD),POS_AUY(NNOD))
+  ALLOCATE(XPOS(NNOD),YPOS(NNOD),PK(NNOD),APK(NNOD),Z(NNOD),POS_AUX(NNOD))
   ALLOCATE(HH_NEW(NNOD),SMOOTH_FIX(NNOD))
 
 
@@ -482,12 +467,8 @@ PROGRAM NSComp2D
 
   !CCCC----> DEFINO VELOCIDAD DE LA MALLA
   W_X=-0.D0 ; W_Y=0.D0
-  MOVING=1 ; YPOS=0.D0 ; XPOS=0.D0 ; IMOOTH=0
+  MOVING=0 ; YPOS=0.D0 ; XPOS=0.D0 ; IMOOTH=0
 
-  ! ****DIMENSION DEL SISTEMA PARA SUBRUTINA NEWMARK****
-  NDIM=2
-  ALLOCATE(DIS(NDIM),VEL(NDIM),ACC(NDIM))
-  
   WRITE(*,'(A,I3,A)') '****-------> RUNGE-KUTTA DE',NRK,'  ORDEN <-------****'
   WRITE(*,*)''
   
@@ -556,9 +537,9 @@ PROGRAM NSComp2D
      U1=U
     
     IF (BANDERA.LE.4) THEN     
-      CALL RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,DXPOS,DYPOS)
+      CALL RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
     ELSE
-      CALL ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB,DXPOS,DYPOS)
+      CALL ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB)
     END IF
    
      
@@ -590,18 +571,19 @@ PROGRAM NSComp2D
         
         CALL PRINTFLAVIA(FR,GAMM,RHO,VEL_X-W_X,VEL_Y-W_Y,P,T,E,RMACH,XPOS,YPOS &
              ,NNOD,ITER,MOVIE,FILE,ILONG)
-
+        
         ITERPRINT=0
 
-        CALL FORCES(NSET_NUMB,IELEM_SETS &
-             ,P,FX,FY,RM)
+        !CALL FORCES(NSETS,NSET_NUMB,IELEM_SETS,ISET,NNOD,IFF &
+        !     ,X,Y,P &
+        !     ,FX,FY,RM)
         
-       ! IF(FMU.NE.0.D0)THEN
-           !CALL FORCE_VISC(NELEM,NNOD,IFF &
-            !    ,IELEM_SETS,ISET,N,NSET_NUMB,UINF,VINF,RHOINF,TINF &
-             !   ,X,Y,P,T,VEL_X,VEL_Y,DNX,DNY,FMU,RHO &
-             !   ,F_VX,F_VY)      
-       ! END IF
+        IF(FMU.NE.0.D0)THEN
+           CALL FORCE_VISC(NELEM,NNOD,IFF &
+                ,IELEM_SETS,ISET,N,NSET_NUMB,UINF,VINF,RHOINF,TINF &
+                ,X,Y,P,T,VEL_X,VEL_Y,DNX,DNY,FMU,RHO &
+                ,F_VX,F_VY)      
+        END IF
         
         OPEN(33,FILE='FORCES',STATUS='UNKNOWN')           
         
@@ -609,21 +591,17 @@ PROGRAM NSComp2D
            WRITE(33,'(A,I2)') 'SET NUMERO',ISET_NUMB
            WRITE(33,'(A,E14.5)') 'FUERZA EN X:',FX(ISET_NUMB)
            WRITE(33,'(A,E14.5/)') 'FUERZA EN Y:',FY(ISET_NUMB)
-           WRITE(33,'(A,E14.5/)') 'MOMENTO:',RM(ISET_NUMB)
-           !WRITE(33,'(A,E14.5)') 'FUERZA VISCOSA EN X:',F_VX(ISET_NUMB)
-           !WRITE(33,'(A,E14.5/)') 'FUERZA VISCOSA EN Y:',F_VY(ISET_NUMB)
-           !WRITE(33,'(A,E14.5)') 'FUERZA TOTAL EN X:',FX(ISET_NUMB)+F_VX(ISET_NUMB)
-           !WRITE(33,'(A,E14.5/)') 'FUERZA TOTAL EN Y:',FY(ISET_NUMB)+F_VY(ISET_NUMB)
+           ! WRITE(33,'(A,E14.5/)') 'MOMENTO:',RM(ISET_NUMB)
+           WRITE(33,'(A,E14.5)') 'FUERZA VISCOSA EN X:',F_VX(ISET_NUMB)
+           WRITE(33,'(A,E14.5/)') 'FUERZA VISCOSA EN Y:',F_VY(ISET_NUMB)
+           WRITE(33,'(A,E14.5)') 'FUERZA TOTAL EN X:',FX(ISET_NUMB)+F_VX(ISET_NUMB)
+           WRITE(33,'(A,E14.5/)') 'FUERZA TOTAL EN Y:',FY(ISET_NUMB)+F_VY(ISET_NUMB)
         END DO
         CLOSE(33)
         
         CALL PRINTREST(ITER,NNOD,U,T,GAMM,TIME,FILE,ILONG)
         
      END IF    
-     CALL NEWMARK_METHOD (DTMIN,ITER,FX,FY,RM)
-     DXPOS=COS(DIS(2))*DIS(1)
-     DYPOS=SIN(DIS(2))*DIS(1)
-     
     BANDERA=BANDERA+1 
   END DO
   !CCCC  -----> CIERRA EL ARCHIVO DE RESULTADOS..
@@ -1796,7 +1774,7 @@ SUBROUTINE PRINTFLAVIA(FR,GAMM,RHO,VEL_X,VEL_Y,P,T,E,RMACH,XPOS,YPOS &
   WRITE(2,'(A)') 'VEL_Y'
   
   DO INOD=1,NNOD
-     WRITE(2,'(I6,3F13.4)') INOD,VEL_X(INOD),VEL_Y(INOD)
+     WRITE(2,'(I6,3E13.4)') INOD,VEL_X(INOD),VEL_Y(INOD)
   END DO
   END IF
   
@@ -1808,7 +1786,7 @@ SUBROUTINE PRINTFLAVIA(FR,GAMM,RHO,VEL_X,VEL_Y,P,T,E,RMACH,XPOS,YPOS &
   WRITE(2,'(A)') 'Y'
   
   DO INOD=1,NNOD     
-     WRITE(2,'(I6,3F12.4)') INOD,XPOS(INOD),YPOS(INOD)
+     WRITE(2,'(I6,3E16.6)') INOD,XPOS(INOD),YPOS(INOD)
   END DO
   END IF
   
@@ -1819,7 +1797,7 @@ SUBROUTINE PRINTFLAVIA(FR,GAMM,RHO,VEL_X,VEL_Y,P,T,E,RMACH,XPOS,YPOS &
   WRITE(2,'(A)') 'DENSITY'
   
   DO INOD=1,NNOD
-     WRITE(2,'(I6,1E12.4)') INOD,RHO(INOD)
+     WRITE(2,'(I6,1E13.4)') INOD,RHO(INOD)
   END DO
   END IF
   
@@ -1891,18 +1869,15 @@ END SUBROUTINE PRINTFLAVIA
 !CCCC  CALCULO DE LAS FUERZAS EN  !CCCC
 !CCCC  CADA UNO DE LOS SETS       !CCCC
 !CCCC-----------------------------!CCCC
-SUBROUTINE FORCES(NSET_NUMB,IELEM_SETS &
-     ,P,FX,FY,RM)
+SUBROUTINE FORCES(NSETS,NSET_NUMB,IELEM_SETS,ISET,NNOD,IFF &
+     ,X,Y,P &
+     ,FX,FY,RM)
   
-  
- USE MALLOCAR
- USE MFUERZAS
- USE MGEOMETRIA
- 
   IMPLICIT REAL(8) (A-H,O-Z)
   
-  INTEGER IELEM_SETS(10)
+  INTEGER IELEM_SETS(10),ISET(2,10,IFF)
   
+  REAL(8) X(NNOD),Y(NNOD)
   REAL(8) P(NNOD)
   REAL(8) FX(10),FY(10),RM(10)
   
@@ -2743,7 +2718,7 @@ END SUBROUTINE VARIABLES
 
 
 
-SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,DXPOS,DYPOS)      
+SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)      
 
   USE DATOS_REFINAMIENTO
   USE DATOS_ENTRADA
@@ -2891,23 +2866,23 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,DXPOS,DYPOS)
      !CCCC  ----> MOVIMIENTO DE MALLA     <----  CCCC 
      !CCCC---------------------------------------CCCC 
 
-     DELTAX=-dtmin*500.d0
-     DO I=1,NMOVE
-        POS_AUX(I)=DELTAX
-     END DO
-      !NODOS SIN MOVIMIENTO         
-     DO I=NMOVE+1,NFIX_MOVE+NMOVE
-        POS_AUX(I)=0.D0
-     END DO
+     !DELTAX=-dtmin*500.d0
+     !DO I=1,NMOVE
+     !   POS_AUX(I)=DELTAX
+     !END DO
+     ! !NODOS SIN MOVIMIENTO         
+     !DO I=NMOVE+1,NFIX_MOVE+NMOVE
+     !   POS_AUX(I)=0.D0
+     !END DO
       
-     B=0.D0
-     CALL GRADCONJ2(S,XPOS,B,NN1,NN2,NNOD,NPOS &
-          ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
-          ,PK,APK,Z) 
+     !B=0.D0
+     !CALL GRADCONJ2(S,XPOS,B,NN1,NN2,NNOD,NPOS &
+     !     ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
+     !     ,PK,APK,Z) 
              
-     W_X=XPOS/DTMIN
+     !W_X=XPOS/DTMIN
 
-     X=X+XPOS
+     !X=X+XPOS
       
      !YPOS=Y
 !!$        IMOOTH=IMOOTH+1
@@ -2975,7 +2950,7 @@ END SUBROUTINE RK
 
 !CCCC---->       ADAMS BASHFORTH
 
-SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB,DXPOS,DYPOS)    
+SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB)    
   USE DATOS_REFINAMIENTO
   USE DATOS_ENTRADA
   USE MNORMALES
@@ -3003,7 +2978,7 @@ SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB,DXPOS,
   REAL(8) DTL(NELEM)
   ! CCCC NODOS VECINOS Y LAPLACIANO
   REAL(8)B(NNOD),RES(NNOD)
-  REAL(8) XPOS(NNOD),YPOS(NNOD),PK(NNOD),APK(NNOD),Z(NNOD),POS_AUX(NNOD),POS_AUY(NNOD)
+  REAL(8) XPOS(NNOD),YPOS(NNOD),PK(NNOD),APK(NNOD),Z(NNOD),POS_AUX(NNOD)
   ! CCCC REFINAMIENTO
   REAL(8) HH_NEW(NNOD)
  
@@ -3122,39 +3097,34 @@ SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB,DXPOS,
         !CCCC---------------------------------------CCCC 
  
          !DELTAX=-dtmin*500.d0
-         DO I=1,NMOVE
-           POS_AUX(I)=DXPOS !pones vector desplazamientos en direccion x
-         END DO
-                
+         !DO I=1,NMOVE
+         !  POS_AUX(I)=DELTAX
+         !END DO
+         !       
        !NODOS SIN MOVIMIENTO 
-         DO I=NMOVE+1,NFIX_MOVE+NMOVE
-            POS_AUX(I)=0.D0
-         END DO
-         B=0.D0
+        ! DO I=NMOVE+1,NFIX_MOVE+NMOVE
+        !    POS_AUX(I)=0.D0
+        ! END DO
+        ! B=0.D0
 
-         CALL GRADCONJ2(S,XPOS,B,NN1,NN2,NNOD,NPOS &
-              ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
-              ,PK,APK,Z) 
+        !CALL GRADCONJ2(S,XPOS,B,NN1,NN2,NNOD,NPOS &
+        !     ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
+        !      ,PK,APK,Z) 
 
-         W_X=XPOS/DTMIN
-         X=X+XPOS
+        !W_X=XPOS/DTMIN
+        !X=X+XPOS
+         !YPOS=Y
+!        IMOOTH=IMOOTH+1
+!        IF(IMOOTH.EQ.IPRINT)THEN
+!           IMOOTH=0
+!           CALL SMOOTH_MESH(NNOD,NELEM,N,XPOS,YPOS &
+!                ,SMOOTH_FIX,SMOOTH_SIM)
+!           W_X=(X-XPOS)/DTMIN
+!           W_Y=(Y-YPOS)/DTMIN
+!        END IF
+       !X=XPOS
+        !Y=YPOS
 
-         DO I=1,NMOVE
-           POS_AUY(I)=DYPOS !pones vector desplazamientos en direccion y
-         END DO
-                
-       !NODOS SIN MOVIMIENTO 
-         DO I=NMOVE+1,NFIX_MOVE+NMOVE
-            POS_AUY(I)=0.D0
-         END DO
-         B=0.D0
-
-         CALL GRADCONJ2(S,YPOS,B,NN1,NN2,NNOD,NPOS &
-              ,ILAUX,POS_AUY,NNMOVE,RAUX,ADIAG &
-              ,PK,APK,Z) 
-
-         W_Y=XPOS/DTMIN
-         Y=Y+YPOS
         !CCCC---------------------------------------CCCC 
         !CCCC  ----> CONDICIONES DE CONTORNO <----  CCCC 
         !CCCC---------------------------------------CCCC 
@@ -3212,201 +3182,3 @@ SUBROUTINE ALLOC
   ALLOCATE(IPER_AUX(NMASTER),IFM(NFIX_MOVE),I_M(NMOVE),ILAUX(NNOD))
   ALLOCATE(SHOC(NELEM),T_SUGN1(NELEM),T_SUGN2(NELEM),T_SUGN3(NELEM))
 END SUBROUTINE ALLOC
-
-!--------------------------------------------------------------------------       
-!                 Newmark's Direct Integration Method
-!--------------------------------------------------------------------------
-! Code written by : - Ing. German Weht                                    
-!                     Resercher & PhD Student                              
-!                     Departamento de Mecanica Aeronautica                     
-!                     Instituto Universitario Aeronautico           
-!                     Cordoba, Argentina  
-! E-mail : gerweht@gmail.com
-!-------------------------------------------------------------------------
-! PURPOSE
-!        Solve linear structural differential equations 
-!               *** Newmark time integration ***
-!        The system of ordinary differential equations
-!                [M]{ACC}+[C]{VEL}+[K]{DIS}={F}
-!
-!        
-! INPUT
-!        [M] :       System Mass              [n,n]
-!        [C] :       System Damping           [n,n]
-!        [K] :       System Stiffness         [n,n]
-!        [F] :       Externally Applied Load  [n]
-!        [DISS] :    Initial Position         [n]
-!        [VELS] :    Initial Velocity         [n]
-!        [ACCS] :    Initial Aceleration      [n]
-!        [T] :       Initial Time              
-!        [TMAX] :    Finish Time
-!        [H] :       Time step 
-!        [G] :       Auxiliaries              [n]
-!        [G1] :      Auxiliaries              [n]
-! OUTPUT
-!       [DIS]:       Displacemente            [n]
-!       [VEL]:       Velocity                 [n]
-!       [ACC]:       Acceleration             [n]
-!
-! The options include changing the value of the "gamma" and "beta"
-! coefficient which appear in the formulation of the method. By default
-! these values are set to gamma = 1/2 and beta = 1/4.
-!
-!
-!-------------------------------------------------------------------------
-
-
-
-SUBROUTINE NEWMARK_METHOD (DTMIN,ITER,FX,FY,RM)
-
-
-  
-  USE MATRICES
-  USE MAT2
-  USE MNEWMARK
-  
-  IMPLICIT REAL(8)(A-H,O-Z)
-  REAL(8) L,FX(10),FY(10),RM(10)
-  
-  !REAL(8),ALLOCATABLE:: M(:,:),C(:,:),K(:,:)
-  !REAL(8),ALLOCATABLE:: DIS(:),DISS(:),VEL(:),VELS(:),ACC(:),ACCS(:),R(:),G(:),G1(:),F(:),CTE(:)
-  PI=DACOS(-1.D0)
-  GR=9.81D0 ! gravedad
-
-  ! **** DEFINICION DE LOS PARAMETROS DE LA SIMULACION ****
-  !T=0.D0 ;   TMAX=10.D0
-  ! **** PASO DE TIMEPO ****
-  !H=1.D-4
-  H=DTMIN
-  
-  
-  ! **** DEFINICION DE CONSTANTES DEL METODO POR DEFAULT GAMA=1/2 BETA=1/4 ****
-  GAMA=.5D0 ; BETA=.25D0
-
-  A1 = 1.D0/(BETA*H*H) ; A2 = 1.D0/(BETA*H) ; A3 = 1.D0/(2.D0*BETA) - 1.D0 ; A4 = (1.D0 - GAMA)*H ; A5 = GAMA*H
-  A1D = GAMA/(BETA*H) ; A2D = GAMA/BETA - 1.D0 ; A3D = 0.5D0*H*(GAMA/BETA - 2.D0)
-  
-  CALL ALLOC1
-  
-  !ALLOCATE(M(NDIM,NDIM),C(NDIM,NDIM),K(NDIM,NDIM))
-  !ALLOCATE(DIS(NDIM),DISS(NDIM),VEL(NDIM),VELS(NDIM),ACC(NDIM),ACCS(NDIM))
-  !ALLOCATE(R(NDIM),G(NDIM),G1(NDIM),F(NDIM),CTE(NDIM))
- 
-  !***** MATRICES *****
-  ! MATRIZ DE MASA
-  M(1,1)=51.5d0   ; M(1,2)=-51.5d0*.0429d0
-  M(2,1)=-51.5d0*.0429d0   ; M(2,2)=2.275d0
-
-  ! MATRIZ DE AMORTIGUAMIENTO
-  C(1,1)=32.358D0/GR ;  C(1,2)=0.D0
-  C(2,1)=0.D0   ;  C(2,2)=5.718D0/GR
-
-  ! MATRIZ DE RIGUIDEZ
-  K(1,1)=50828.463D0/GR   ; K(1,2)=0.D0
-  K(2,1)=0.D0   ; K(2,2)=35923.241D0/GR
-
-  ! VECTOR DE FUERZAS EXTERNAS
-  L=DSIN(DIS(2))*FX(1)+DCOS(DIS(2))*FY(1)
-  F(1)=L
-  F(2)=RM(1)
-  
-  !IF (ITER.EQ.1)THEN
-  ! CONDICIONES INICIALES
-  !DIS(1)=0.05D0; DIS(2)=PI/8.D0
-  !VEL=0.D0
-  !ACC=0.D0
-  !END IF
-  ! Matrix with [Keff]=[K]+a1[M]+a1D[C]
-  K=K+A1*M+A1D*C
-  
-  !CCCC  -----> TRIANGULAR SUPERIOR DE LA MATRIZ K, SI ES CONSTANTE
-  DO I=1,NDIM-1
-     DO J=I+1,NDIM
-        CTE(J)=K(J,I)/K(I,I)
-        DO l=I+1,NDIM
-           K(J,l)=K(J,l)-CTE(J)*K(I,l)
-        END DO
-     END DO
-  END DO
-  
-  !DO WHILE(T.LT.TMAX)
-     !Guardo el resultado del paso anterior
-     DISS = DIS
-     VELS = VEL
-     ACCS = ACC
-     R=0.D0
-     ! Vector of effective loading forces at time t+dt
-     ! R = F + [M]*(a1*dis + a2*vel + a3*acc) + [C]*(a1d*dis + a2d*vel + a3d*acc)
-     ! Sumo ambos vectores, todas operaciones vectoriales
-     
-     ! Primera parte [M]*(a1*dis + a2*vel + a3*acc)
-     G= A1*DIS+A2*VEL+A3*ACC   
-     CALL MATVEC(M,G,G1,NDIM)
-     R=F+G1
-
-     ! Segunda parte [C]*(a1d*dis + a2d*vel + a3d*acc)
-     G=A1D*DIS+A2D*VEL+A3D*ACC
-     CALL MATVEC(C,G,G1,NDIM)
-     R=R+G1
-
-     ! Resuelvo el sistema [Keff]q=Feff y obtengo los desplazamientos en t+dt
-     CALL GAUSS(K,R,DIS,CTE,NDIM)
-     
-     ! Aceleraciones el t+dt
-     ACC = A1*(DIS - DISS) - A2*VELS - A3*ACCS
-     ! Velocidad a t+dt
-     VEL = VELS + A4*ACCS + A5*ACC
-     !T=T+H
-     !WRITE(1,*) T,DIS,VEL
-  !END DO
-
-END SUBROUTINE NEWMARK_METHOD
-     
-
-
-! SUBRUTINA PRODUCTO MATRIZ VECTOR
-SUBROUTINE MATVEC(A,X,AUX,NDIM)
-  IMPLICIT REAL(8)(A-H,O-Z)
-  REAL(8)A(NDIM,NDIM),X(NDIM),AUX(NDIM)
-  
-  AUX=0.D0
-  DO I=1,NDIM
-     DO J=1,NDIM
-        AUX(I)=AUX(I)+A(I,J)*X(J)
-     END DO
-  END DO
-  
-  RETURN
-END SUBROUTINE MATVEC
-
-
-! METODO DE GAUSS JORDAN PARA SISTEMAS LINEALES
-SUBROUTINE GAUSS(A,B,X,CTE,NDIM)
-  IMPLICIT REAL(8) (A-H,O-Z)
-  REAL(8) B(NDIM),X(NDIM),A(NDIM,NDIM),CTE(NDIM)
-  
-  !CCCC  -----> TRIANGULAR SUPERIOR AL VECTOR TERMINO INDEPENDIENTE
-  DO I=1,NDIM-1
-     DO J=I+1,NDIM
-        B(J)=B(J)-CTE(J)*B(I)
-     END DO
-  END DO
-     
-  !CCCC  -----> RETROSUSTITUCION    
-  DO I=NDIM,1,-1
-     S=0.D0
-     DO J=I+1,NDIM
-        S=S+A(I,J)*X(J)
-     END DO
-     X(I)=(B(I)-S)/A(I,I)
-  END DO
-  
-END SUBROUTINE GAUSS
-
-SUBROUTINE ALLOC1
- USE MATRICES
- USE MAT2
- ALLOCATE(M(NDIM,NDIM),C(NDIM,NDIM),K(NDIM,NDIM))
- ALLOCATE(DISS(NDIM),VELS(NDIM),ACCS(NDIM))
- ALLOCATE(R(NDIM),G(NDIM),G1(NDIM),F(NDIM),CTE(NDIM))
-END SUBROUTINE ALLOC1
