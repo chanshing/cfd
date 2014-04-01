@@ -1067,119 +1067,105 @@ END SUBROUTINE DELTAT
 !CCCC  CALCULO DE LA INTEGRAL DE LOS TERMINOS DE ESTABILIZACION  CCCC
 !CCCC------------------------------------------------------------CCCC
 SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
+    USE MALLOCAR
+    USE MGEOMETRIA
+    IMPLICIT REAL(8) (A-H,O-Z)
+    REAL(8) U(4,NNOD),UN(4,NNOD)
+    REAL(8) GAMM(NNOD)
+    REAL(8) ALF(3),BET(3)
   
-  USE MALLOCAR
-  USE MGEOMETRIA
+	REAL(8) A1(3,4), A2(3,4), AUX(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
+	REAL(8) UN_TEMP(4,3), M_local(3) 
+	INTEGER IPOIN(3)
 
-  IMPLICIT REAL(8) (A-H,O-Z)
-    
-  REAL(8) U(4,NNOD),UN(4,NNOD)
-  REAL(8) GAMM(NNOD)
-  REAL(8) ALF(3),BET(3)
+    DATA ALF/.5D0,.5D0,0.D0/
+    DATA BET/0.D0,.5D0,.5D0/
   
-  !C---->     RHO=U(1)
-  !C---->     RHO*VEL_X=U(2)
-  !C---->     RHO*VEL_Y=U(3)
-  !C---->     RHO*ET=U(4)
-  
-  DATA ALF/.5D0,.5D0,0.D0/
-  DATA BET/0.D0,.5D0,.5D0/
-  
-  NGAUSS=3    !PTOS DE GAUSS DONDE VOY A INTERGRAR
+    NGAUSS=3    !PTOS DE GAUSS DONDE VOY A INTERGRAR
    
-  UN=0.D0
+    UN=0.D0
 
-  DO IELEM=1,NELEM
-      
-     N1=N(1,IELEM)
-     N2=N(2,IELEM)
-     N3=N(3,IELEM)
-     
-     GAMA=(GAMM(N1)+GAMM(N2)+GAMM(N3))/3.D0
-     GM=GAMA-1.D0
-     RNX1=DNX(1,IELEM) ; RNX2=DNX(2,IELEM) ; RNX3=DNX(3,IELEM)
-     RNY1=DNY(1,IELEM) ; RNY2=DNY(2,IELEM) ; RNY3=DNY(3,IELEM)
-     
-     !CCCC  ----> DERIVADA DE RHO           
-     DRX= RNX1*U(1,N1)+RNX2*U(1,N2)+RNX3*U(1,N3)
-     DRY= RNY1*U(1,N1)+RNY2*U(1,N2)+RNY3*U(1,N3)
-     !CCCC  ----> DERIVADA DE RHO.VEL_X           
-     DRUX= RNX1*U(2,N1)+RNX2*U(2,N2)+RNX3*U(2,N3)
-     DRUY= RNY1*U(2,N1)+RNY2*U(2,N2)+RNY3*U(2,N3)
-     !CCCC  ----> DERIVADA DE RHO.VEL_Y           
-     DRVX= RNX1*U(3,N1)+RNX2*U(3,N2)+RNX3*U(3,N3)
-     DRVY= RNY1*U(3,N1)+RNY2*U(3,N2)+RNY3*U(3,N3)
-     !CCCC  ----> DERIVADA DE RHO.ET           
-     DREX= RNX1*U(4,N1)+RNX2*U(4,N2)+RNX3*U(4,N3)
-     DREY= RNY1*U(4,N1)+RNY2*U(4,N2)+RNY3*U(4,N3)
+	!$OMP PARALLEL &
+	!$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,J,&
+	!$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,UN_TEMP,M_local)
+
+	!$OMP DO
+    DO IELEM=1,NELEM
+		UN_TEMP = 0.D0
+		IPOIN = N(:,IELEM)
+
+		M_LOCAL(1)=M(IPOIN(1))
+		M_LOCAL(2)=M(IPOIN(2))
+		M_LOCAL(3)=M(IPOIN(3))
+
+        GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
+        GM=GAMA-1.D0
+
+		NX = DNX(:,IELEM)
+		NY = DNY(:,IELEM)
+
+		UX(:) = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
+		UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+
+        AR=AREA(IELEM)/3.D0
     
-     
-     AR=AREA(IELEM)/3.D0
-    
-     DO J=1,NGAUSS
+        DO J=1,NGAUSS
         
-        RN1=1.D0-ALF(J)-BET(J)
-        RN2=ALF(J)
-        RN3=BET(J)
+            RN1=1.D0-ALF(J)-BET(J)
+            RN2=ALF(J)
+            RN3=BET(J)
+
+            !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
+			U_LOC = RN1*U(:,IPOIN(1)) + RN2*U(:,IPOIN(2)) + RN3*U(:,IPOIN(3))
+
+            !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
+            VX=U_LOC(2)/U_LOC(1)
+            VY=U_LOC(3)/U_LOC(1)
+            ET=U_LOC(4)/U_LOC(1)
+            RMOD2=VX*VX+VY*VY
+            TEMP=GM/FR*(ET-.5D0*RMOD2) !FR=CTE. UNIVERSAL DE LOS GASES
+            C=DSQRT(GAMA*FR*TEMP)
+
+            !CCCC  ----> DEFINICION DE LAS MATRICES A1 Y A2
+            !A1(:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+            A1(1,:) = (/ GM/2.D0*RMOD2-VX*VX  , (3.D0-GAMA)*VX                , -GM*VY        , GM                         /)
+            A1(2,:) = (/ -VX*VY 			  , VY 			                  , VX	          , 0.D0                       /)
+            A1(3,:) = (/ (GM*RMOD2-GAMA*ET)*VX, GAMA*ET-GM/2.D0*RMOD2-GM*VX*VX, -GM*VX*VY     , GAMA*VX                    /)
+
+            !A2(:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+            A2(1,:) = (/ -VX*VY               , VY                            , VX            , 0.D0 			           /)
+            A2(2,:) = (/ GM/2.D0*RMOD2-VY*VY  , -GM*VX                        , (3.D0-GAMA)*VY, GM  		               /)
+            A2(3,:) = (/ (GM*RMOD2-GAMA*ET)*VY, -GM*VX*VY                     , GAMA*ET-GM/2.D0*RMOD2-GM*VY*VY,    GAMA*VY /)
         
-        !CCCC  ----> INTEGRO LAS VARIABLES PRIMITIVAS EN LOS PUNTOS DE GAUSS
-        U1= RN1*U(1,N1)+RN2*U(1,N2)+RN3*U(1,N3)
-        U2= RN1*U(2,N1)+RN2*U(2,N2)+RN3*U(2,N3)
-        U3= RN1*U(3,N1)+RN2*U(3,N2)+RN3*U(3,N3)
-        U4= RN1*U(4,N1)+RN2*U(4,N2)+RN3*U(4,N3)
-        
-        !CCCC  ----> DEFINO VARIABLES PURAS
-        VX=U2/U1
-        VY=U3/U1
-        ET=U4/U1 
-        RMOD2=VX*VX+VY*VY
-        TEMP=GM/FR*(ET-.5D0*RMOD) !FR=CTE. UNIVERSAL DE LOS GASES
-        C=DSQRT(GAMA*FR*TEMP)
-        
-        !CCCC  ----> DEFINICION DE LAS MATRICES A1 Y A2
-        !CCCC  ----> A1 
-        A1_21= GM/2.D0*RMOD2-VX*VX ; A1_22=(3.D0-GAMA)*VX ; A1_23=-GM*VY ; A1_24=GM
-        A1_31= -VX*VY ; A1_32=VY ; A1_33=VX
-        A1_41=(GM*RMOD2-GAMA*ET)*VX ; A1_42=GAMA*ET-GM/2.D0*RMOD2-GM*VX*VX ; A1_43=-GM*VX*VY ; A1_44=GAMA*VX
-        !CCCC  ----> A2
-        A2_21=-VX*VY ; A2_22=VY ; A2_23=VX
-        A2_31=GM/2.D0*RMOD2-VY*VY ; A2_32=-GM*VX ; A2_33=(3.D0-GAMA)*VY ; A2_34=GM
-        A2_41=(GM*RMOD2-GAMA*ET)*VY ; A2_42=-GM*VX*VY ; A2_43=GAMA*ET-GM/2.D0*RMOD2-GM*VY*VY ; A2_44=GAMA*VY 
-        
-        !CCCC------------------------------------------------------------------------------------------------------
-        !CCCC  ----> MULTIPLICO POR PARTES PARA SIMPLIFICAR EL ASUNTO
-        !CCCC  ----> 'A' POR LAS DERIVADAS
-        AUXA1=          +       DRUX                                       +                    DRVY
-        AUXA2=A1_21*DRX + A1_22*DRUX + A1_23*DRVX + A1_24*DREX + A2_21*DRY + A2_22*DRUY + A2_23*DRVY
-        AUXA3=A1_31*DRX + A1_32*DRUX + A1_33*DRVX +              A2_31*DRY + A2_32*DRUY + A2_33*DRVY + A2_34*DREY
-        AUXA4=A1_41*DRX + A1_42*DRUX + A1_43*DRVX + A1_44*DREX + A2_41*DRY + A2_42*DRUY + A2_43*DRVY + A2_44*DREY
-        
-        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N1
-        UN(1,N1)=UN(1,N1)+AUXA1*RN1*AR
-        UN(2,N1)=UN(2,N1)+AUXA2*RN1*AR 
-        UN(3,N1)=UN(3,N1)+AUXA3*RN1*AR 
-        UN(4,N1)=UN(4,N1)+AUXA4*RN1*AR 
-        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N2
-        UN(1,N2)=UN(1,N2)+AUXA1*RN2*AR 
-        UN(2,N2)=UN(2,N2)+AUXA2*RN2*AR 
-        UN(3,N2)=UN(3,N2)+AUXA3*RN2*AR 
-        UN(4,N2)=UN(4,N2)+AUXA4*RN2*AR 
-        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N3
-        UN(1,N3)=UN(1,N3)+AUXA1*RN3*AR 
-        UN(2,N3)=UN(2,N3)+AUXA2*RN3*AR 
-        UN(3,N3)=UN(3,N3)+AUXA3*RN3*AR 
-        UN(4,N3)=UN(4,N3)+AUXA4*RN3*AR 
-        
-     END DO
-  END DO
-  
-  DO INOD=1,NNOD
-     DO J=1,4
-        UN(J,INOD)=-UN(J,INOD)/M(INOD)
-     END DO
-  END DO
-    
-  RETURN
+            !CCCC  ----> MULTIPLICO POR PARTES PARA SIMPLIFICAR EL ASUNTO
+            !CCCC  ----> 'A' POR LAS DERIVADAS
+        	AUX(1)=                  UX(2)                                       +                    UY(3)
+			AUX(2:4) = A1(:,1)*UX(1) + A1(:,2)*UX(2) + A1(:,3)*UX(3) + A1(:,4)*UX(4) + A2(:,1)*UY(1) + A2(:,2)*UY(2)&
+				+ A2(:,3)*UY(3) + A2(:,4)*UY(4)
+
+			UN_TEMP(:,1) = UN_TEMP(:,1) + AUX*RN1*AR
+			UN_TEMP(:,2) = UN_TEMP(:,2) + AUX*RN2*AR
+			UN_TEMP(:,3) = UN_TEMP(:,3) + AUX*RN3*AR
+        END DO
+
+		DO I=1,4
+			!$OMP ATOMIC
+			UN(I,IPOIN(1)) = UN(I,IPOIN(1)) + UN_TEMP(I,1)
+			!$OMP ATOMIC
+			UN(I,IPOIN(2)) = UN(I,IPOIN(2)) + UN_TEMP(I,2)
+			!$OMP ATOMIC
+			UN(I,IPOIN(3)) = UN(I,IPOIN(3)) + UN_TEMP(I,3)
+		END DO
+
+    END DO
+	!$OMP END DO
+	!$OMP END PARALLEL
+
+    DO INOD=1,NNOD
+    	UN(:,INOD)=-UN(:,INOD)/M(INOD)
+    END DO
+
+    RETURN
 END SUBROUTINE CUARTO_ORDEN
 
 !CCCC---------------------------------------------------------------!CCCC
@@ -1305,220 +1291,128 @@ END SUBROUTINE ESTAB
 !CCCC  CALCULO DE LA INTEGRAL DE LOS TERMINOS DE ESTABILIZACION  !CCCC
 !CCCC------------------------------------------------------------!CCCC
 SUBROUTINE TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
-  
-  USE MALLOCAR
-  USE MGEOMETRIA
-  USE MESTABILIZACION 
+    USE MALLOCAR
+    USE MGEOMETRIA
+    USE MESTABILIZACION
+	USE OMP_LIB
+    IMPLICIT REAL(8) (A-H,O-Z)
+    REAL(8) U(4,NNOD),P(NNOD),UN(4,NNOD),T(NNOD),GAMM(NNOD)
+    REAL(8) RHS(4,NNOD)
+    REAL(8) DTL(NELEM)
+    REAL(8) ALF(3),BET(3)
+	REAL(8) A1(3,4), A2(3,4), AUX(4), AA(8), AUX_PHI(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
+	REAL(8) ARR(4), TAU(4), CHOQ(3), PHI_LOC(4), RHS_TEMP(4,3)
+	INTEGER IPOIN(3)
 
-  IMPLICIT REAL(8) (A-H,O-Z)
-    
-  REAL(8) U(4,NNOD),P(NNOD),UN(4,NNOD),T(NNOD),GAMM(NNOD)
-  REAL(8) RHS(4,NNOD)
-  
-  REAL(8) ALF(3),BET(3)
-  REAL(8) DTL(NELEM)
-  
-  !C---->     RHO=U(1)
-  !C---->     RHO*VEL_X=U(2)
-  !C---->     RHO*VEL_Y=U(3)
-  !C---->     RHO*ET=U(4)
-  
-  DATA ALF/.5D0,.5D0,0.D0/
-  DATA BET/0.D0,.5D0,.5D0/
-  
-  NGAUSS=3    !PTOS DE GAUSS DONDE VOY A INTERGRAR
-  
-  DO IELEM=1,NELEM
-     
-     N1=N(1,IELEM) ; N2=N(2,IELEM) ; N3=N(3,IELEM)
-     
-     GAMA=(GAMM(N1)+GAMM(N2)+GAMM(N3))/3.D0
-     GM=GAMA-1.D0
-     TEMP=(T(N1)+T(N2)+T(N3))/3.D0
-     FMU= 1.716d-5*162.6/(TEMP-110.55)*(TEMP/273.15)**.75D0     !SUTHERLAND
-     
-     RNX1=DNX(1,IELEM) ; RNX2=DNX(2,IELEM) ; RNX3=DNX(3,IELEM)
-     RNY1=DNY(1,IELEM) ; RNY2=DNY(2,IELEM) ; RNY3=DNY(3,IELEM)
-     
-     !CCCC  ----> DERIVADA DE RHO           
-     DRX= RNX1*U(1,N1)+RNX2*U(1,N2)+RNX3*U(1,N3)
-     DRY= RNY1*U(1,N1)+RNY2*U(1,N2)+RNY3*U(1,N3)
-     !CCCC  ----> DERIVADA DE RHO.VEL_X           
-     DRUX= RNX1*U(2,N1)+RNX2*U(2,N2)+RNX3*U(2,N3)
-     DRUY= RNY1*U(2,N1)+RNY2*U(2,N2)+RNY3*U(2,N3)
-     !CCCC  ----> DERIVADA DE RHO.VEL_Y           
-     DRVX= RNX1*U(3,N1)+RNX2*U(3,N2)+RNX3*U(3,N3)
-     DRVY= RNY1*U(3,N1)+RNY2*U(3,N2)+RNY3*U(3,N3)
-     !CCCC  ----> DERIVADA DE RHO.ET           
-     DREX= RNX1*U(4,N1)+RNX2*U(4,N2)+RNX3*U(4,N3)
-     DREY= RNY1*U(4,N1)+RNY2*U(4,N2)+RNY3*U(4,N3)
-     
-     AR=AREA(IELEM)*DTL(IELEM)/3.D0
-     !AR=AREA(IELEM)/3.D0
-     !CCCC  ----> LONG. CARACTERISTICA
-     HLONGX=HHX(IELEM)
-     HLONGY=HHY(IELEM)
-     HLONG=DSQRT(AREA(IELEM))
-     !CCCC  ----> ESTAB. TEZDUYAR
-     TAU1=T_SUGN1(IELEM)
-     TAU2=T_SUGN2(IELEM)
-     TAU3=T_SUGN3(IELEM)
-     ALFA_MU=SHOC(IELEM)
-         
-     DO J=1,NGAUSS
-        
-        RN1=1.D0-ALF(J)-BET(J)
-        RN2=ALF(J)
-        RN3=BET(J)
-        
-        !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
-        U1= RN1*U(1,N1)+RN2*U(1,N2)+RN3*U(1,N3)
-        U2= RN1*U(2,N1)+RN2*U(2,N2)+RN3*U(2,N3)
-        U3= RN1*U(3,N1)+RN2*U(3,N2)+RN3*U(3,N3)
-        U4= RN1*U(4,N1)+RN2*U(4,N2)+RN3*U(4,N3)
+    DATA ALF/.5D0,.5D0,0.D0/
+    DATA BET/0.D0,.5D0,.5D0/
 
-        FI_1= RN1*UN(1,N1)+RN2*UN(1,N2)+RN3*UN(1,N3)
-        FI_2= RN1*UN(2,N1)+RN2*UN(2,N2)+RN3*UN(2,N3)
-        FI_3= RN1*UN(3,N1)+RN2*UN(3,N2)+RN3*UN(3,N3)
-        FI_4= RN1*UN(4,N1)+RN2*UN(4,N2)+RN3*UN(4,N3)
-        !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
-        VX=U2/U1
-        VY=U3/U1
-        ET=U4/U1
-        RMOD2=VX*VX+VY*VY
-        TEMP=GM/FR*(ET-.5D0*RMOD2) !FR=CTE. UNIVERSAL DE LOS GASES
-        
-        C=DSQRT(GAMA*FR*TEMP)
-        
-        !CCCC  ----> VARIABLES COMPACTAS
-        FMU1=FMU-(FK/FCV)   ! FK=CONDUCTIVIDAD TERMICA; FCV=CALOR ESPECIFICO A VOL. CTE
-        FMU43=4.D0/3.D0*FMU ! FMU=VISCOSIDAD
-        FMU23=2.D0/3.D0*FMU
-        RU1=AR/U1           ! RU1= FACTOR COMUN DEL JACOBIANO DE LAS MATRICES K
-        
-        !CCCC  ----> DEFINICION DE LAS MATRICES A1 Y A2
+    NGAUSS=3    !PTOS DE GAUSS DONDE VOY A INTERGRAR
 
-        !CCCC  ----> A1
-        A1_21= GM/2.D0*RMOD2-VX*VX ; A1_22=(3.D0-GAMA)*VX ; A1_23=-GM*VY ; A1_24=GM
-        A1_31= -VX*VY ; A1_32=VY ; A1_33=VX
-        A1_41=(GM*RMOD2-GAMA*ET)*VX ; A1_42=GAMA*ET-GM/2.D0*RMOD2-GM*VX*VX ; A1_43=-GM*VX*VY ; A1_44=GAMA*VX
-        !CCCC  ----> A2
-        A2_21=-VX*VY ; A2_22=VY ; A2_23=VX
-        A2_31=GM/2.D0*RMOD2-VY*VY ; A2_32=-GM*VX ; A2_33=(3.D0-GAMA)*VY ; A2_34=GM
-        A2_41=(GM*RMOD2-GAMA*ET)*VY ; A2_42=-GM*VX*VY ; A2_43=GAMA*ET-GM/2.D0*RMOD2-GM*VY*VY ; A2_44=GAMA*VY 
-       
-        !CCCC----------------------------------------
-        !CCCC  ----> NO CALCULO LOS TERMINOS VISCOSOS CUANDO MU=0.0
-        !IF(RMU.GT.0.D0)THEN
-           !CCCC  ----> DEFINICION DE LAS MATRICES K11, K12, K21 Y K22
-           
-           !CCCC  ----> K11
-         !  RK11_21=-FMU43*VX ; RK11_22=FMU43
-         !  RK11_31=-FMU*VY ; RK11_33=FMU 
-         !  RK11_41=FK/FCV*(.5D0*RMOD2-FCV*TEMP)-FMU*RMOD2-FMU/3.D0*VX*VX ; RK11_42=(FMU/3.D0+FMU1)*VX
-         !  RK11_43=FMU1*VY ; RK11_44=FK/FCV
-         !  !CCCC  ----> K12
-         !  RK12_21=FMU23*VY ; RK12_23=-FMU23
-         !  RK12_31=-FMU*VX ; RK12_32=FMU
-         !  RK12_41=-FMU/3.D0*VX*VY ; RK12_42=FMU*VY ; RK12_43=-FMU23*VX
-         !  !CCCC  ----> K21
-         !  RK21_21=-FMU*VY ; RK21_23=FMU
-         !  RK21_31=FMU23*VX ; RK21_32=-FMU23
-         !  RK21_41=-FMU/3.D0*VX*VY ; RK21_42=-FMU23*VY ; RK21_43=FMU*VX
-         !  !CCCC  ----> K22
-         !  RK22_21=-FMU*VX ; RK22_22=FMU
-         !  RK22_31=-FMU43*VY ; RK22_33=FMU43
-         !  RK22_41=FK/FCV*(.5D0*RMOD2-FCV*TEMP)-FMU*RMOD2-FMU/3.D0*VY*VY ; RK22_42=FMU1*VX
-         !  RK22_43=(FMU/3.D0+FMU1)*VY ; RK22_44=FK/FCV
+	!$OMP PARALLEL &
+	!$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,HLONG,HLONGX,HLONGY,TAU,ALFA_MU,I,J,&
+	!$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,AA,AUX_PHI,CHOQ,ARR,RHS_TEMP)
 
-           !CCCC  ----> TERMINOS VISCOSOS
-         !  VV2=RK11_21*DRX + RK11_22*DRUX + RK12_21*DRY + RK12_23*DRVY
-         !  VV3=RK11_31*DRX + RK11_33*DRVX + RK12_31*DRY + RK12_32*DRUY
-         !  VV4=RK11_41*DRX + RK11_42*DRUX + RK11_43*DRVX + RK11_44*DREX + RK12_41*DRY + RK12_42*DRUY + RK12_43*DRVY
-         !  
-         !  VV6=RK21_21*DRX + RK21_23*DRVX + RK22_21*DRY + RK22_22*DRUY
-         !  VV7=RK21_31*DRX + RK21_32*DRUX + RK22_31*DRY + RK22_33*DRVY
-         !  VV8=RK21_41*DRX + RK21_42*DRUX + RK21_43*DRVX + RK22_41*DRY + RK22_42*DRUY + RK22_43*DRVY + RK22_44*DREY
-         !  
-         !  !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N1
-         !  
-         !  RHS(2,N1)=RHS(2,N1)+RU1*(RNX1*VV2+RNY1*VV6)
-         !  RHS(3,N1)=RHS(3,N1)+RU1*(RNX1*VV3+RNY1*VV7) 
-         !  RHS(4,N1)=RHS(4,N1)+RU1*(RNX1*VV4+RNY1*VV8)
-         !  !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N2
-         !  
-         !  RHS(2,N2)=RHS(2,N2)+RU1*(RNX2*VV2+RNY2*VV6)
-         !  RHS(3,N2)=RHS(3,N2)+RU1*(RNX2*VV3+RNY2*VV7)
-         !  RHS(4,N2)=RHS(4,N2)+RU1*(RNX2*VV4+RNY2*VV8)
-         !  !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N3
-         !  
-         !  RHS(2,N3)=RHS(2,N3)+RU1*(RNX3*VV2+RNY3*VV6)
-         !  RHS(3,N3)=RHS(3,N3)+RU1*(RNX3*VV3+RNY3*VV7)
-         !  RHS(4,N3)=RHS(4,N3)+RU1*(RNX3*VV4+RNY3*VV8)    
-        !END IF
-        
-        !CCCC-----------------------------------------------------------------------------------------------------------------
-        !CCCC----> TERMINOS DE ESTABILIZACION Y CAPTURA DE CHOQUE                        
-        ARR1=AR*TAU1
-        ARR2=AR*TAU2
-        ARR3=AR*TAU3
-        
-        !CCCC---->************************************<----!CCCC 
-        !CCCC---->  CALCULO DE MUa Y SUS COMPONENTES  <----!CCCC
-        !CCCC---->************************************<----!CCCC
-       
-        
-        !CCCC  ----> ARMO EL PRESSURE SWITCH
-        
-        CHOQ1=alfa_mu*AR*CTE !*PS(N1)
-        CHOQ2=alfa_mu*AR*CTE !*PS(N2)
-        CHOQ3=alfa_mu*AR*CTE !*PS(N3)
-        !CCCC----------------------------------------------------------------------------------------------------
-        
-        
-        !CCCC----------------------------------------------------------------------------------------------------
-        !CCCC  ----> MULTIPLICO POR PARTES PARA SIMPLIFICAR EL ASUNTO
-        !CCCC  ----> 'A' POR LAS DERIVADAS
-        AUXA1=                  DRUX                                       +                    DRVY
-        AUXA2=A1_21*DRX + A1_22*DRUX + A1_23*DRVX + A1_24*DREX + A2_21*DRY + A2_22*DRUY + A2_23*DRVY
-        AUXA3=A1_31*DRX + A1_32*DRUX + A1_33*DRVX +              A2_31*DRY + A2_32*DRUY + A2_33*DRVY + A2_34*DREY
-        AUXA4=A1_41*DRX + A1_42*DRUX + A1_43*DRVX + A1_44*DREX + A2_41*DRY + A2_42*DRUY + A2_43*DRVY + A2_44*DREY
-        
-        AUXA11=AUXA1+FI_1
-        AUXA22=AUXA2+FI_2
-        AUXA33=AUXA3+FI_3
-        AUXA44=AUXA4+FI_4
-        !CCCC  ----> LO ANTERIOR POR 'A' TRANSPUESTA
+	!$OMP DO
+    DO IELEM=1,NELEM
+		RHS_TEMP = 0.D0
+		IPOIN = N(:,IELEM)
 
-        AA1=                     AUXA22  
-        AA2=A1_21*AUXA11 + A1_22*AUXA22 + A1_23*AUXA33 + A1_24*AUXA44                  
-        AA3=A1_31*AUXA11 + A1_32*AUXA22 + A1_33*AUXA33 
-        AA4=A1_41*AUXA11 + A1_42*AUXA22 + A1_43*AUXA33 + A1_44*AUXA44
-        AA5=                                    AUXA33  
-        AA6=A2_21*AUXA11 + A2_22*AUXA22 + A2_23*AUXA33 
-        AA7=A2_31*AUXA11 + A2_32*AUXA22 + A2_33*AUXA33 + A2_34*AUXA44
-        AA8=A2_41*AUXA11 + A2_42*AUXA22 + A2_43*AUXA33 + A2_44*AUXA44
-        
-       
-        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N1
-        RHS(1,N1)=RHS(1,N1)+(RNX1*AA1+RNY1*AA5)*ARR1 +AUXA1*RN1*AR +(RNX1*DRX+RNY1*DRY)*CHOQ1
-        RHS(2,N1)=RHS(2,N1)+(RNX1*AA2+RNY1*AA6)*ARR2 +AUXA2*RN1*AR +(RNX1*DRUX+RNY1*DRUY)*CHOQ1
-        RHS(3,N1)=RHS(3,N1)+(RNX1*AA3+RNY1*AA7)*ARR2 +AUXA3*RN1*AR +(RNX1*DRVX+RNY1*DRVY)*CHOQ1
-        RHS(4,N1)=RHS(4,N1)+(RNX1*AA4+RNY1*AA8)*ARR3 +AUXA4*RN1*AR +(RNX1*DREX+RNY1*DREY)*CHOQ1
-        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N2
-        RHS(1,N2)=RHS(1,N2)+(RNX2*AA1+RNY2*AA5)*ARR1 +AUXA1*RN2*AR +(RNX2*DRX+RNY2*DRY)*CHOQ2
-        RHS(2,N2)=RHS(2,N2)+(RNX2*AA2+RNY2*AA6)*ARR2 +AUXA2*RN2*AR +(RNX2*DRUX+RNY2*DRUY)*CHOQ2
-        RHS(3,N2)=RHS(3,N2)+(RNX2*AA3+RNY2*AA7)*ARR2 +AUXA3*RN2*AR +(RNX2*DRVX+RNY2*DRVY)*CHOQ2
-        RHS(4,N2)=RHS(4,N2)+(RNX2*AA4+RNY2*AA8)*ARR3 +AUXA4*RN2*AR +(RNX2*DREX+RNY2*DREY)*CHOQ2
-        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO N3
-        RHS(1,N3)=RHS(1,N3)+(RNX3*AA1+RNY3*AA5)*ARR1 +AUXA1*RN3*AR +(RNX3*DRX+RNY3*DRY)*CHOQ3
-        RHS(2,N3)=RHS(2,N3)+(RNX3*AA2+RNY3*AA6)*ARR2 +AUXA2*RN3*AR +(RNX3*DRUX+RNY3*DRUY)*CHOQ3
-        RHS(3,N3)=RHS(3,N3)+(RNX3*AA3+RNY3*AA7)*ARR2 +AUXA3*RN3*AR +(RNX3*DRVX+RNY3*DRVY)*CHOQ3
-        RHS(4,N3)=RHS(4,N3)+(RNX3*AA4+RNY3*AA8)*ARR3 +AUXA4*RN3*AR +(RNX3*DREX+RNY3*DREY)*CHOQ3
-     END DO
-  END DO
-  
-  RETURN
+        GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
+        GM=GAMA-1.D0
+        TEMP=(T(IPOIN(1))+T(IPOIN(2))+T(IPOIN(3)))/3.D0
+        FMU= 1.716D-5*162.6/(TEMP-110.55)*(TEMP/273.15)**.75D0     !SUTHERLAND
+
+		NX = DNX(:,IELEM)
+		NY = DNY(:,IELEM)
+
+		UX(:) = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
+		UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+
+        AR=AREA(IELEM)*DTL(IELEM)/3.D0
+        !CCCC  ----> LONG. CARACTERISTICA
+        HLONGX=HHX(IELEM)
+        HLONGY=HHY(IELEM)
+        HLONG=DSQRT(AREA(IELEM))
+        !CCCC  ----> ESTAB. TEZDUYAR
+        TAU(1)=T_SUGN1(IELEM)
+        TAU(2)=T_SUGN2(IELEM)
+        TAU(3)=T_SUGN2(IELEM)
+        TAU(4)=T_SUGN3(IELEM)
+        ALFA_MU=SHOC(IELEM)
+
+        DO J=1,NGAUSS
+
+            RN1=1.D0-ALF(J)-BET(J)
+            RN2=ALF(J)
+            RN3=BET(J)
+
+            !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
+			U_LOC = RN1*U(:,IPOIN(1)) + RN2*U(:,IPOIN(2)) + RN3*U(:,IPOIN(3))
+			PHI_LOC = RN1*UN(:,IPOIN(1)) + RN2*UN(:,IPOIN(2)) + RN3*UN(:,IPOIN(3))		
+
+            !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
+            VX=U_LOC(2)/U_LOC(1)
+            VY=U_LOC(3)/U_LOC(1)
+            ET=U_LOC(4)/U_LOC(1)
+            RMOD2=VX*VX+VY*VY
+            TEMP=GM/FR*(ET-.5D0*RMOD2) !FR=CTE. UNIVERSAL DE LOS GASES
+
+            C=DSQRT(GAMA*FR*TEMP)
+
+            !CCCC  ----> DEFINICION DE LAS MATRICES A1 Y A2
+            !A1(:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+            A1(1,:) = (/ GM/2.D0*RMOD2-VX*VX  , (3.D0-GAMA)*VX                , -GM*VY        , GM                         /)
+            A1(2,:) = (/ -VX*VY 			  , VY 			                  , VX	          , 0.D0                       /)
+            A1(3,:) = (/ (GM*RMOD2-GAMA*ET)*VX, GAMA*ET-GM/2.D0*RMOD2-GM*VX*VX, -GM*VX*VY     , GAMA*VX                    /)
+
+            !A2(:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+            A2(1,:) = (/ -VX*VY               , VY                            , VX            , 0.D0 			           /)
+            A2(2,:) = (/ GM/2.D0*RMOD2-VY*VY  , -GM*VX                        , (3.D0-GAMA)*VY, GM  		               /)
+            A2(3,:) = (/ (GM*RMOD2-GAMA*ET)*VY, -GM*VX*VY                     , GAMA*ET-GM/2.D0*RMOD2-GM*VY*VY,    GAMA*VY /)
+
+            !CCCC----> TERMINOS DE ESTABILIZACION Y CAPTURA DE CHOQUE
+			ARR = AR*TAU
+
+            !CCCC  ----> ARMO EL PRESSURE SWITCH
+            CHOQ(1)=ALFA_MU*AR*CTE
+            CHOQ(2)=ALFA_MU*AR*CTE
+            CHOQ(3)=ALFA_MU*AR*CTE
+
+            !CCCC  ----> MULTIPLICO POR PARTES PARA SIMPLIFICAR EL ASUNTO
+            !CCCC  ----> 'A' POR LAS DERIVADAS
+        	AUX(1)=                  UX(2)                                       +                    UY(3)
+			AUX(2:4) = A1(:,1)*UX(1) + A1(:,2)*UX(2) + A1(:,3)*UX(3) + A1(:,4)*UX(4) + A2(:,1)*UY(1) + A2(:,2)*UY(2)&
+				+ A2(:,3)*UY(3) + A2(:,4)*UY(4)
+
+			AUX_PHI = AUX + PHI_LOC
+
+            !CCCC  ----> LO ANTERIOR POR 'A' TRANSPUESTA
+			AA(1) = AUX_PHI(2)
+			AA(2:4) = A1(:,1)*AUX_PHI(1) + A1(:,2)*AUX_PHI(2) + A1(:,3)*AUX_PHI(3) + A1(:,4)*AUX_PHI(4)
+			AA(5) = AUX_PHI(3)
+			AA(6:8) = A2(:,1)*AUX_PHI(1) + A2(:,2)*AUX_PHI(2) + A2(:,3)*AUX_PHI(3) + A2(:,4)*AUX_PHI(4)
+
+            !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO IPOIN(1)
+			RHS_TEMP(:,1) = RHS_TEMP(:,1) + (NX(1)*AA(1:4) + NY(1)*AA(5:8))*ARR(:) + &
+					AUX(:)*RN1*AR + (NX(1)*UX(:) + NY(1)*UY(:))*CHOQ(1)
+			RHS_TEMP(:,2) = RHS_TEMP(:,2) + (NX(2)*AA(1:4) + NY(2)*AA(5:8))*ARR(:) + &
+					AUX(:)*RN2*AR + (NX(2)*UX(:) + NY(2)*UY(:))*CHOQ(2)
+			RHS_TEMP(:,3) = RHS_TEMP(:,3) + (NX(3)*AA(1:4) + NY(3)*AA(5:8))*ARR(:) + &
+					AUX(:)*RN3*AR + (NX(3)*UX(:) + NY(3)*UY(:))*CHOQ(3)
+        ENDDO
+		DO I=1,4
+			!$OMP ATOMIC
+			RHS(I,IPOIN(1)) = RHS(I,IPOIN(1)) + RHS_TEMP(I,1)
+			!$OMP ATOMIC
+			RHS(I,IPOIN(2)) = RHS(I,IPOIN(2)) + RHS_TEMP(I,2)
+			!$OMP ATOMIC
+			RHS(I,IPOIN(3)) = RHS(I,IPOIN(3)) + RHS_TEMP(I,3)
+		END DO
+    ENDDO
+	!$OMP END DO
+	!$OMP END PARALLEL
+    RETURN
 END SUBROUTINE TODO
 
 !CCCC  ----> RUTINA DE INTERPOLACION PARA GAS EN EQUILIBRIO TERMOQUIMICO
@@ -2957,9 +2851,7 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
      !     ,PK,APK,Z) 
              
      !W_X=XPOS/DTMIN
-(1,INOD)
      !X=X+XPOS
-      
      !YPOS=Y
 !!$        IMOOTH=IMOOTH+1
 !!$        IF(IMOOTH.EQ.IPRINT)THEN
