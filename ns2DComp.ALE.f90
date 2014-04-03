@@ -921,31 +921,35 @@ SUBROUTINE DERIV(HMIN)
 
     IMPLICIT REAL(8) (A-H,O-Z)
 
-    HMIN=1.D10
+	!$OMP PARALLEL &
+	!$OMP PRIVATE(X1,X2,X3,Y1,Y2,Y3,AR,IELEM,ATA1,ATA2)
+	!$OMP DO
     DO IELEM=1,NELEM
-        N1=N(1,IELEM)
-        N2=N(2,IELEM)
-        N3=N(3,IELEM)
+        X1=X(N(1,IELEM)); X2=X(N(2,IELEM)); X3=X(N(3,IELEM))
+        Y1=Y(N(1,IELEM)); Y2=Y(N(2,IELEM)); Y3=Y(N(3,IELEM))
      
-        AR=X(N2)*Y(N3)+X(N3)*Y(N1)+X(N1)*Y(N2)-(X(N2)*Y(N1)+X(N3)*Y(N2)+X(N1)*Y(N3))
+        AR=X2*Y3+X3*Y1+X1*Y2-(X2*Y1+X3*Y2+X1*Y3)
         AR=AR/2.D0
         AREA(IELEM)=AR
      
-        DNX(1,IELEM)=(Y(N2)-Y(N3))/(2.D0*AR)
-        DNX(2,IELEM)=(Y(N3)-Y(N1))/(2.D0*AR)
-        DNX(3,IELEM)=(Y(N1)-Y(N2))/(2.D0*AR)
-        DNY(1,IELEM)=(X(N3)-X(N2))/(2.D0*AR)
-        DNY(2,IELEM)=(X(N1)-X(N3))/(2.D0*AR)
-        DNY(3,IELEM)=(X(N2)-X(N1))/(2.D0*AR)
+        DNX(1,IELEM)=(Y2-Y3)/(2.D0*AR)
+        DNX(2,IELEM)=(Y3-Y1)/(2.D0*AR)
+        DNX(3,IELEM)=(Y1-Y2)/(2.D0*AR)
+        DNY(1,IELEM)=(X3-X2)/(2.D0*AR)
+        DNY(2,IELEM)=(X1-X3)/(2.D0*AR)
+        DNY(3,IELEM)=(X2-X1)/(2.D0*AR)
      
         HH(IELEM)=DSQRT(AREA(IELEM))
-        IF (HH(IELEM).LT.HMIN) HMIN=HH(IELEM)
-        ATA1=MIN( X(N3)-X(N2) , X(N1)-X(N3) , X(N2)-X(N1) )
-        ATA2=MIN( Y(N3)-Y(N2) , Y(N1)-Y(N3) , Y(N2)-Y(N1) )
+        ATA1=MIN( X3-X2 , X1-X3 , X2-X1 )
+        ATA2=MIN( Y3-Y2 , Y1-Y3 , Y2-Y1 )
         HHX(IELEM)=ABS(ATA1)
         HHY(IELEM)=ABS(ATA2)
     END DO
-  
+	!$OMP END DO
+	!$OMP END PARALLEL
+
+	HMIN = MINVAL(HH) 
+	IF(HMIN > 1.D10) HMIN = 1.D10
     RETURN
 END SUBROUTINE DERIV
 
