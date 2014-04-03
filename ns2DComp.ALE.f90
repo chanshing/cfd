@@ -1210,9 +1210,9 @@ SUBROUTINE ESTAB(U,T,GAMA,FR,RMU &
         
             TAU=TAU+TERM_1+TERM_2*C
         
-            H_RGNE=H_RGNE+H_RGN1
-            H_RGN=H_RGN+H_RGN2
-            H_JGN=H_JGN+TERM_2
+            H_RGNE = H_RGNE + H_RGN1
+            H_RGN = H_RGN + H_RGN2
+            H_JGN = H_JGN + TERM_2
         END DO
      
         TAU=1.D0/TAU
@@ -1231,6 +1231,14 @@ SUBROUTINE ESTAB(U,T,GAMA,FR,RMU &
         T_SUGN1(IELEM)= tmp
         T_SUGN2(IELEM)= tmp
         T_SUGN3(IELEM)= tmp
+
+     	!IF(RMU.NE.0.D0)THEN
+     	!   TAU_SUNG3=   H_RGN**2.D0/(4.D0*FMU/RHOINF)
+     	!   TAU_SUNG3_E= H_RGNE**2.D0/(4.D0*FMU/RHOINF)
+        
+     	!   T_SUGN2(IELEM)=(RESUMEN+1.D0/TAU_SUNG3**2.D0)**(-.5D0)
+     	!   T_SUGN3(IELEM)=(RESUMEN+1.D0/TAU_SUNG3_E**2.D0)**(-.5D0)
+     	!END IF
      
     END DO
     !$OMP END PARALLEL DO
