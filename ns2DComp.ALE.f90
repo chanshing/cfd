@@ -501,7 +501,6 @@ PROGRAM NSComp2D
     ALPHA=DISN(2)
    
     DO WHILE (ITER.LT.MAXITER.AND.ISAL.EQ.0)
- 
         ITER=ITER+1
         !CCCC  ----> CALCULOS DE LOS TERMINOS PARA CADA ITERACION
         IF(MOVING.EQ.1)THEN
@@ -525,7 +524,6 @@ PROGRAM NSComp2D
 
         !CCCC  ----> CALCULO DEL dT
         !CCCC  --------------------
-     
         CALL DELTAT(N,FSAFE,DTMIN,HH,DT)
       
         IF (BANDERA.EQ.1) THEN
@@ -915,37 +913,41 @@ END SUBROUTINE NORMALES
 !CCCC---->      de los elementos        <----CCCC
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 SUBROUTINE DERIV(HMIN)
- 
     USE MGEOMETRIA
     USE MALLOCAR
 
     IMPLICIT REAL(8) (A-H,O-Z)
 
-    HMIN=1.D10
+	!$OMP PARALLEL &
+	!$OMP PRIVATE(X1,X2,X3,Y1,Y2,Y3,AR,IELEM,ATA1,ATA2)
+	!$OMP DO
     DO IELEM=1,NELEM
-        N1=N(1,IELEM)
-        N2=N(2,IELEM)
-        N3=N(3,IELEM)
+        X1=N(1,IELEM); X2=N(2,IELEM); X3=N(3,IELEM)
+        Y1=N(1,IELEM); Y2=N(2,IELEM); Y3=N(3,IELEM)
      
-        AR=X(N2)*Y(N3)+X(N3)*Y(N1)+X(N1)*Y(N2)-(X(N2)*Y(N1)+X(N3)*Y(N2)+X(N1)*Y(N3))
+        AR=X2*Y3+X3*Y1+X1*Y2-(X2*Y1+X3*Y2+X1*Y3)
         AR=AR/2.D0
         AREA(IELEM)=AR
      
-        DNX(1,IELEM)=(Y(N2)-Y(N3))/(2.D0*AR)
-        DNX(2,IELEM)=(Y(N3)-Y(N1))/(2.D0*AR)
-        DNX(3,IELEM)=(Y(N1)-Y(N2))/(2.D0*AR)
-        DNY(1,IELEM)=(X(N3)-X(N2))/(2.D0*AR)
-        DNY(2,IELEM)=(X(N1)-X(N3))/(2.D0*AR)
-        DNY(3,IELEM)=(X(N2)-X(N1))/(2.D0*AR)
+        DNX(1,IELEM)=(Y2-Y3)/(2.D0*AR)
+        DNX(2,IELEM)=(Y3-Y1)/(2.D0*AR)
+        DNX(3,IELEM)=(Y1-Y2)/(2.D0*AR)
+        DNY(1,IELEM)=(X3-X2)/(2.D0*AR)
+        DNY(2,IELEM)=(X1-X3)/(2.D0*AR)
+        DNY(3,IELEM)=(X2-X1)/(2.D0*AR)
      
         HH(IELEM)=DSQRT(AREA(IELEM))
-        IF (HH(IELEM).LT.HMIN) HMIN=HH(IELEM)
-        ATA1=MIN( X(N3)-X(N2) , X(N1)-X(N3) , X(N2)-X(N1) )
-        ATA2=MIN( Y(N3)-Y(N2) , Y(N1)-Y(N3) , Y(N2)-Y(N1) )
+        ATA1=MIN( X3-X2 , X1-X3 , X2-X1 )
+        ATA2=MIN( Y3-Y2 , Y1-Y3 , Y2-Y1 )
         HHX(IELEM)=ABS(ATA1)
         HHY(IELEM)=ABS(ATA2)
     END DO
-  
+	!$OMP END DO
+	!$OMP END PARALLEL
+
+	HMIN = MINVAL(HH) 
+	IF(HMIN > 1.D10) HMIN = 1.D10
+
     RETURN
 END SUBROUTINE DERIV
 
@@ -954,7 +956,6 @@ END SUBROUTINE DERIV
 !CCCC  ---->     masas condensada    <----  CCCC
 !CCCC---------------------------------------CCCC
 SUBROUTINE MASAS
-
     USE MGEOMETRIA
     USE MALLOCAR
 
@@ -964,9 +965,7 @@ SUBROUTINE MASAS
   
     DO IELEM=1,NELEM
      
-        N1=N(1,IELEM)
-        N2=N(2,IELEM)
-        N3=N(3,IELEM)
+        N1=N(1,IELEM); N2=N(2,IELEM); N3=N(3,IELEM)
      
         AR=AREA(IELEM)/3.D0
      
@@ -1044,7 +1043,6 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
   
     REAL(8) A1(3,4), A2(3,4), AUX(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
     REAL(8) UN_TEMP(4,3), M_local(3)
-    INTEGER IPOIN(3)
 
     DATA ALF/.5D0,.5D0,0.D0/
     DATA BET/0.D0,.5D0,.5D0/
@@ -1054,26 +1052,26 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
     UN=0.D0
 
     !$OMP PARALLEL &
-    !$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,J,&
+    !$OMP PRIVATE(IELEM,N1,N2,N3,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,J,&
     !$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,UN_TEMP,M_local)
 
     !$OMP DO
     DO IELEM=1,NELEM
         UN_TEMP = 0.D0
-        IPOIN = N(:,IELEM)
+		N1 = N(1,IELEM); N2 = N(2,IELEM); N3 = N(3,IELEM)
 
-        M_LOCAL(1)=M(IPOIN(1))
-        M_LOCAL(2)=M(IPOIN(2))
-        M_LOCAL(3)=M(IPOIN(3))
+        M_LOCAL(1)=M(N1)
+        M_LOCAL(2)=M(N2)
+        M_LOCAL(3)=M(N3)
 
-        GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
+        GAMA=(GAMM(N1)+GAMM(N2)+GAMM(N3))/3.D0
         GM=GAMA-1.D0
 
         NX = DNX(:,IELEM)
         NY = DNY(:,IELEM)
 
-        UX(:) = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
-        UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+        UX(:) = U(:,N1)*NX(1) + U(:,N2)*NX(2) + U(:,N3)*NX(3)
+        UY(:) = U(:,N1)*NY(1) + U(:,N2)*NY(2) + U(:,N3)*NY(3)
 
         AR=AREA(IELEM)/3.D0
     
@@ -1084,7 +1082,7 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
             RN3=BET(J)
 
                         !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
-            U_LOC = RN1*U(:,IPOIN(1)) + RN2*U(:,IPOIN(2)) + RN3*U(:,IPOIN(3))
+            U_LOC = RN1*U(:,N1) + RN2*U(:,N2) + RN3*U(:,N3)
 
             !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
             VX=U_LOC(2)/U_LOC(1)
@@ -1118,11 +1116,11 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
 
         DO I=1,4
             !$OMP ATOMIC
-            UN(I,IPOIN(1)) = UN(I,IPOIN(1)) + UN_TEMP(I,1)
+            UN(I,N1) = UN(I,N1) + UN_TEMP(I,1)
             !$OMP ATOMIC
-            UN(I,IPOIN(2)) = UN(I,IPOIN(2)) + UN_TEMP(I,2)
+            UN(I,N2) = UN(I,N2) + UN_TEMP(I,2)
             !$OMP ATOMIC
-            UN(I,IPOIN(3)) = UN(I,IPOIN(3)) + UN_TEMP(I,3)
+            UN(I,N3) = UN(I,N3) + UN_TEMP(I,3)
         END DO
 
     END DO
@@ -1157,9 +1155,7 @@ SUBROUTINE ESTAB(U,T,GAMA,FR,RMU &
     !$OMP PRIVATE(I,IELEM,N1,N2,N3,GM,TAU,H_RGNE,H_RGN,H_JGN,RHO_ELEM,VX,VY,WX,WY,VEL2,DRX,DRY,DR2,&
     !$OMP DTX,DTY,DT2,DUX,DUY,DU2,RTX,RTY,RJX,RJY,RUX,RUY,TEMP,C,FMU,TERM_1,TERM_2,H_RGN1,H_RGN2,tmp)
     DO IELEM=1,NELEM
-        N1=N(1,IELEM)
-        N2=N(2,IELEM)
-        N3=N(3,IELEM)
+        N1=N(1,IELEM); N2=N(2,IELEM); N3=N(3,IELEM)
         GM=(GAMM(N1)+GAMM(N2)+GAMM(N3))/3.D0
         TAU=0.D0
         H_RGNE=0.D0
@@ -1257,7 +1253,6 @@ SUBROUTINE TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
     REAL(8) ALF(3),BET(3)
     REAL(8) A1(3,4), A2(3,4), AUX(4), AA(8), AUX_PHI(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
     REAL(8) ARR(4), TAU(4), CHOQ(3), PHI_LOC(4), RHS_TEMP(4,3)
-    INTEGER IPOIN(3)
 
     DATA ALF/.5D0,.5D0,0.D0/
     DATA BET/0.D0,.5D0,.5D0/
@@ -1271,18 +1266,18 @@ SUBROUTINE TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
     !$OMP DO
     DO IELEM=1,NELEM
         RHS_TEMP = 0.D0
-        IPOIN = N(:,IELEM)
+		N1 = N(1,IELEM); N2 = N(2,IELEM); N3 = N(3,IELEM)
 
-        GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
+        GAMA=(GAMM(N1)+GAMM(N2)+GAMM(N3))/3.D0
         GM=GAMA-1.D0
-        TEMP=(T(IPOIN(1))+T(IPOIN(2))+T(IPOIN(3)))/3.D0
+        TEMP=(T(N1)+T(N2)+T(N3))/3.D0
         FMU= 1.716D-5*162.6/(TEMP-110.55)*(TEMP/273.15)**.75D0     !SUTHERLAND
 
         NX = DNX(:,IELEM)
         NY = DNY(:,IELEM)
 
-        UX(:) = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
-        UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+        UX(:) = U(:,N1)*NX(1) + U(:,N2)*NX(2) + U(:,N3)*NX(3)
+        UY(:) = U(:,N1)*NY(1) + U(:,N2)*NY(2) + U(:,N3)*NY(3)
 
         AR=AREA(IELEM)*DTL(IELEM)/3.D0
         !CCCC  ----> LONG. CARACTERISTICA
@@ -1303,8 +1298,8 @@ SUBROUTINE TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
             RN3=BET(J)
 
                         !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
-            U_LOC = RN1*U(:,IPOIN(1)) + RN2*U(:,IPOIN(2)) + RN3*U(:,IPOIN(3))
-            PHI_LOC = RN1*UN(:,IPOIN(1)) + RN2*UN(:,IPOIN(2)) + RN3*UN(:,IPOIN(3))
+            U_LOC = RN1*U(:,N1) + RN2*U(:,N2) + RN3*U(:,N3)
+            PHI_LOC = RN1*UN(:,N1) + RN2*UN(:,N2) + RN3*UN(:,N3)
 
             !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
             VX=U_LOC(2)/U_LOC(1)
@@ -1358,11 +1353,11 @@ SUBROUTINE TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
         ENDDO
         DO I=1,4
             !$OMP ATOMIC
-            RHS(I,IPOIN(1)) = RHS(I,IPOIN(1)) + RHS_TEMP(I,1)
+            RHS(I,N1) = RHS(I,N1) + RHS_TEMP(I,1)
             !$OMP ATOMIC
-            RHS(I,IPOIN(2)) = RHS(I,IPOIN(2)) + RHS_TEMP(I,2)
+            RHS(I,N2) = RHS(I,N2) + RHS_TEMP(I,2)
             !$OMP ATOMIC
-            RHS(I,IPOIN(3)) = RHS(I,IPOIN(3)) + RHS_TEMP(I,3)
+            RHS(I,N3) = RHS(I,N3) + RHS_TEMP(I,3)
         END DO
     ENDDO
     !$OMP END DO
@@ -1829,13 +1824,9 @@ SUBROUTINE FORCES(NSETS,NSET_NUMB,IELEM_SETS,NNOD &
     REAL(8) P(NNOD)
     REAL(8) FX(10),FY(10),RM(10)
   
-    DO I=1,NSET_NUMB
-        FX(I)=0.D0
-        FY(I)=0.D0
-        RM(I)=0.D0
-    END DO
-  
- 
+    FX(1:NSET_NUMB)=0.D0
+    FY(1:NSET_NUMB)=0.D0
+    RM(1:NSET_NUMB)=0.D0
   
     DO ISET_NUMB=1,NSET_NUMB
         DO II=1,IELEM_SETS(ISET_NUMB)
@@ -1870,7 +1861,6 @@ SUBROUTINE FORCE_VISC(NELEM,NNOD,IFF &
     ,IELEM_SETS,ISET,N,NSET_NUMB,UINF,VINF,RHOINF,TINF &
     ,X,Y,P,T,VEL_X,VEL_Y,DNX,DNY,RMU,RHO &
     ,F_VX,F_VY)
-      
 
     IMPLICIT REAL(8) (A-H,O-Z)
 
@@ -2001,7 +1991,6 @@ SUBROUTINE FUENTE(DTL)
     REAL(8) DTL(NELEM)
     REAL(8) ALF(3),BET(3)
     real(8) rhs_temp(4,3), UX(4), UY(4), NX(3), NY(3)
-    integer IPOIN(3)
   
     DATA ALF/.5D0,.5D0,0.D0/
     DATA BET/0.D0,.5D0,.5D0/
@@ -2016,13 +2005,13 @@ SUBROUTINE FUENTE(DTL)
     DO IELEM=1,NELEM
         rhs_temp = 0.d0
 
-        IPOIN = N(:,IELEM)
+		N1 = N(1,IELEM); N2 = N(2,IELEM); N3 = N(3,IELEM)
  
         NX = DNX(:,IELEM)
         NY = DNY(:,IELEM)
 
-        UX = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
-        UY = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+        UX(:) = U(:,N1)*NX(1) + U(:,N2)*NX(2) + U(:,N3)*NX(3)
+        UY(:) = U(:,N1)*NY(1) + U(:,N2)*NY(2) + U(:,N3)*NY(3)
 
         AR=AREA(IELEM)*DTL(IELEM)/3.D0
      
@@ -2032,8 +2021,8 @@ SUBROUTINE FUENTE(DTL)
             RN2=ALF(J)
             RN3=BET(J)
 
-            WX=RN1*W_X(IPOIN(1))+RN2*W_X(IPOIN(2))+RN3*W_X(IPOIN(3))
-            WY=RN1*W_Y(IPOIN(1))+RN2*W_Y(IPOIN(2))+RN3*W_Y(IPOIN(3))
+            WX=RN1*W_X(N1)+RN2*W_X(N2)+RN3*W_X(N3)
+            WY=RN1*W_Y(N1)+RN2*W_Y(N2)+RN3*W_Y(N3)
 
             RHS_TEMP(:,1)=RHS_TEMP(:,1)-RN1*(UX*WX + UY*WY)*AR
             RHS_TEMP(:,2)=RHS_TEMP(:,2)-RN2*(UX*WX + UY*WY)*AR
@@ -2043,11 +2032,11 @@ SUBROUTINE FUENTE(DTL)
 
         DO I=1,4
             !$OMP ATOMIC
-            RHS(I,IPOIN(1)) = RHS(I,IPOIN(1)) + RHS_TEMP(I,1)
+            RHS(I,N1) = RHS(I,N1) + RHS_TEMP(I,1)
             !$OMP ATOMIC
-            RHS(I,IPOIN(2)) = RHS(I,IPOIN(2)) + RHS_TEMP(I,2)
+            RHS(N2) = RHS(I,N2) + RHS_TEMP(I,2)
             !$OMP ATOMIC
-            RHS(I,IPOIN(3)) = RHS(I,IPOIN(3)) + RHS_TEMP(I,3)
+            RHS(I,N3) = RHS(I,N3) + RHS_TEMP(I,3)
         END DO
 
     END DO
@@ -2392,9 +2381,7 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
   
     CALL RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
   
-    DO INOD=1,NNOD
-        RES(INOD)=B(INOD)-RES(INOD)
-    END DO
+    RES=B-RES
  
     DO IN=1,IFIXP
         RES(IFIXPRES(IN))=0.D0
@@ -2405,37 +2392,22 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
     DO WHILE (DABS(RR_12).GT.CONJERR.AND.K.LT.1000)
      
         K=K+1
-        DO INOD=1,NNOD
-            Z(INOD)=RES(INOD)/ADIAG(INOD)
-        END DO
+        Z=RES/ADIAG
      
         RR_12=PKAPK2(RES,Z,NNOD)
      
         IF (K.EQ.1) THEN
-        
-            DO IK=1,NNOD 
-                PK(IK)=Z(IK)
-            END DO 
-            
+            PK=ZK
         ELSE
-            
             BET=RR_12/RR_22 
-            
-            DO IK=1,NNOD 
-                PK(IK)=Z(IK)+BET*PK(IK)
-            END DO 
-            
+            PK=Z+BET*PK
         END IF
          
         CALL RESIDUO2(APK,S,PK,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
         ALF=RR_12/PKAPK2(APK,PK,NNOD)
          
-        DO IK=1,NNOD
-            
-            PRESS(IK)=PRESS(IK)+ALF*PK(IK) 
-            RES(IK)=RES(IK)-ALF*APK(IK) 
-            
-        END DO
+        PRESS=PRESS+ALF*PK 
+        RES=RES-ALF*APK 
          
         RR_22=RR_12
    
@@ -2474,10 +2446,7 @@ FUNCTION FRR_12(RES,NNOD)
   
     REAL(8) RES(NNOD)
   
-    FRR_12=0.D0
-    DO INOD=1,NNOD
-        FRR_12=FRR_12+RES(INOD)*RES(INOD)
-    END DO
+    FRR_12 = sum(RES*RES)
   
     RETURN
 END FUNCTION FRR_12
@@ -2487,10 +2456,7 @@ FUNCTION PKAPK2(APK,PK,NNOD)
     IMPLICIT REAL(8) (A-H,O-Z)
     REAL(8) APK(NNOD),PK(NNOD)
   
-    PKAPK2=0.D0
-    DO INOD=1,NNOD
-        PKAPK2=PKAPK2+PK(INOD)*APK(INOD)
-    END DO
+    PKAPK2=PKAPK2 + sum(PK*APK)
   
     RETURN
 END FUNCTION PKAPK2
