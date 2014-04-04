@@ -959,7 +959,6 @@ END SUBROUTINE DERIV
 !CCCC  ---->     masas condensada    <----  CCCC
 !CCCC---------------------------------------CCCC
 SUBROUTINE MASAS
-
     USE MGEOMETRIA
     USE MALLOCAR
 
@@ -988,7 +987,6 @@ END SUBROUTINE MASAS
 !CCCC  ----> Calculo del delta t <----  CCCC
 !CCCC-----------------------------------CCCC
 SUBROUTINE DELTAT(N,FSAFE,DTMIN,HH,DT)
-  
     USE MALLOCAR
     USE DATOS_ENTRADA
     USE MVELOCIDADES
@@ -1153,42 +1151,41 @@ SUBROUTINE ESTAB(U,T,GAMA,FR,RMU &
     IMPLICIT REAL(8) (A-H,O-Z)
 
     REAL(8) U(4,NNOD),T(NNOD),GAMM(NNOD)
+	integer IPOIN(3)
   
     !CCCC  ----> CTES DE CALCULO PARA SHOCK-CAPTURING
     CC=DSQRT(GAMA*FR*TINF)
     VEL2=DSQRT(UINF*UINF+VINF*VINF)
   
     !$OMP PARALLEL DO &
-    !$OMP PRIVATE(I,IELEM,N1,N2,N3,GM,TAU,H_RGNE,H_RGN,H_JGN,RHO_ELEM,VX,VY,WX,WY,VEL2,DRX,DRY,DR2,&
+    !$OMP PRIVATE(I,IELEM,IPOIN,GM,TAU,H_RGNE,H_RGN,H_JGN,RHO_ELEM,VX,VY,WX,WY,VEL2,DRX,DRY,DR2,&
     !$OMP DTX,DTY,DT2,DUX,DUY,DU2,RTX,RTY,RJX,RJY,RUX,RUY,TEMP,C,FMU,TERM_1,TERM_2,H_RGN1,H_RGN2,tmp)
     DO IELEM=1,NELEM
-        N1=N(1,IELEM)
-        N2=N(2,IELEM)
-        N3=N(3,IELEM)
-        GM=(GAMM(N1)+GAMM(N2)+GAMM(N3))/3.D0
+        IPOIN=N(:,IELEM)
+        GM=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
         TAU=0.D0
         H_RGNE=0.D0
         H_RGN=0.D0
         H_JGN=0.D0
      
         !CCCC  ----> VARIABLES ELEMENTALES
-        RHO_ELEM=(U(1,N1)+U(1,N2)+U(1,N3))/3.D0
-        VX=(VEL_X(N1)+VEL_X(N2)+VEL_X(N3))/3.D0
-        VY=(VEL_Y(N1)+VEL_Y(N2)+VEL_Y(N3))/3.D0
+        RHO_ELEM=(U(1,IPOIN(1))+U(1,IPOIN(2))+U(1,IPOIN(3)))/3.D0
+        VX=(VEL_X(IPOIN(1))+VEL_X(IPOIN(2))+VEL_X(IPOIN(3)))/3.D0
+        VY=(VEL_Y(IPOIN(1))+VEL_Y(IPOIN(2))+VEL_Y(IPOIN(3)))/3.D0
      
         !PARTES NUEVAS
-        WX=(W_X(N1)+W_X(N2)+W_X(N3))/3.D0
-        WY=(W_Y(N1)+W_Y(N2)+W_Y(N3))/3.D0
+        WX=(W_X(IPOIN(1))+W_X(IPOIN(2))+W_X(IPOIN(3)))/3.D0
+        WY=(W_Y(IPOIN(1))+W_Y(IPOIN(2))+W_Y(IPOIN(3)))/3.D0
         VX=VX-WX ; VY=VY-WY
         VEL2=DSQRT(VX*VX+VY*VY)
      
         !CCCC  ----> DERIVADA DE RHO
-        DRX= U(1,N1)*DNX(1,IELEM)+U(1,N2)*DNX(2,IELEM)+U(1,N3)*DNX(3,IELEM)
-        DRY= U(1,N1)*DNY(1,IELEM)+U(1,N2)*DNY(2,IELEM)+U(1,N3)*DNY(3,IELEM)
+        DRX= U(1,IPOIN(1))*DNX(1,IELEM)+U(1,IPOIN(2))*DNX(2,IELEM)+U(1,IPOIN(3))*DNX(3,IELEM)
+        DRY= U(1,IPOIN(1))*DNY(1,IELEM)+U(1,IPOIN(2))*DNY(2,IELEM)+U(1,IPOIN(3))*DNY(3,IELEM)
         DR2=DSQRT(DRX*DRX+DRY*DRY)+1.D-20
         !CCCC  ----> DERIVADA DE TEMPERATURA
-        DTX= T(N1)*DNX(1,IELEM)+T(N2)*DNX(2,IELEM)+T(N3)*DNX(3,IELEM)
-        DTY= T(N1)*DNY(1,IELEM)+T(N2)*DNY(2,IELEM)+T(N3)*DNY(3,IELEM)
+        DTX= T(IPOIN(1))*DNX(1,IELEM)+T(IPOIN(2))*DNX(2,IELEM)+T(IPOIN(3))*DNX(3,IELEM)
+        DTY= T(IPOIN(1))*DNY(1,IELEM)+T(IPOIN(2))*DNY(2,IELEM)+T(IPOIN(3))*DNY(3,IELEM)
         DT2=DSQRT(DTX*DTX+DTY*DTY)+1.D-20
         !CCCC  ----> DERIVADA DE LA VELOCIDAD
         DUX= VEL2*DNX(1,IELEM)+VEL2*DNX(2,IELEM)+VEL2*DNX(3,IELEM)
@@ -1205,7 +1202,7 @@ SUBROUTINE ESTAB(U,T,GAMA,FR,RMU &
         RUX=DUX/DU2
         RUY=DUY/DU2
      
-        TEMP=(T(N1)+T(N2)+T(N3))/3.D0
+        TEMP=(T(IPOIN(1))+T(IPOIN(2))+T(IPOIN(3)))/3.D0
         C=DSQRT(GM*FR*TEMP)
      
         FMU= RMU*162.6/(TEMP-110.55)*(TEMP/273.15)**.75D0 !SUTHERLAND
@@ -1842,13 +1839,9 @@ SUBROUTINE FORCES(NSETS,NSET_NUMB,IELEM_SETS,NNOD &
     REAL(8) P(NNOD)
     REAL(8) FX(10),FY(10),RM(10)
   
-    DO I=1,NSET_NUMB
-        FX(I)=0.D0
-        FY(I)=0.D0
-        RM(I)=0.D0
-    END DO
-  
- 
+    FX(1:NSET_NUMB)=0.D0
+    FY(1:NSET_NUMB)=0.D0
+    RM(1:NSET_NUMB)=0.D0
   
     DO ISET_NUMB=1,NSET_NUMB
         DO II=1,IELEM_SETS(ISET_NUMB)
@@ -2404,10 +2397,8 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
     END DO
   
     CALL RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
-  
-    DO INOD=1,NNOD
-        RES(INOD)=B(INOD)-RES(INOD)
-    END DO
+
+    RES=B-RES
  
     DO IN=1,IFIXP
         RES(IFIXPRES(IN))=0.D0
@@ -2418,37 +2409,22 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
     DO WHILE (DABS(RR_12).GT.CONJERR.AND.K.LT.1000)
      
         K=K+1
-        DO INOD=1,NNOD
-            Z(INOD)=RES(INOD)/ADIAG(INOD)
-        END DO
+        Z=RES/ADIAG
      
         RR_12=PKAPK2(RES,Z,NNOD)
      
         IF (K.EQ.1) THEN
-        
-            DO IK=1,NNOD 
-                PK(IK)=Z(IK)
-            END DO 
-            
+            PK=ZK
         ELSE
-            
             BET=RR_12/RR_22 
-            
-            DO IK=1,NNOD 
-                PK(IK)=Z(IK)+BET*PK(IK)
-            END DO 
-            
+            PK=Z+BET*PK
         END IF
          
         CALL RESIDUO2(APK,S,PK,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
         ALF=RR_12/PKAPK2(APK,PK,NNOD)
          
-        DO IK=1,NNOD
-            
-            PRESS(IK)=PRESS(IK)+ALF*PK(IK) 
-            RES(IK)=RES(IK)-ALF*APK(IK) 
-            
-        END DO
+        PRESS=PRESS+ALF*PK 
+        RES=RES-ALF*APK 
          
         RR_22=RR_12
    
@@ -2485,12 +2461,9 @@ FUNCTION FRR_12(RES,NNOD)
   
     IMPLICIT REAL(8) (A-H,O-Z)
   
-    REAL(8) RES(NNOD)
+    REAL(8) RES(:)
   
-    FRR_12=0.D0
-    DO INOD=1,NNOD
-        FRR_12=FRR_12+RES(INOD)*RES(INOD)
-    END DO
+    FRR_12 = sum(RES*RES)
   
     RETURN
 END FUNCTION FRR_12
@@ -2500,10 +2473,7 @@ FUNCTION PKAPK2(APK,PK,NNOD)
     IMPLICIT REAL(8) (A-H,O-Z)
     REAL(8) APK(NNOD),PK(NNOD)
   
-    PKAPK2=0.D0
-    DO INOD=1,NNOD
-        PKAPK2=PKAPK2+PK(INOD)*APK(INOD)
-    END DO
+    PKAPK2= sum(PK*APK)
   
     RETURN
 END FUNCTION PKAPK2
