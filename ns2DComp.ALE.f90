@@ -915,33 +915,34 @@ END SUBROUTINE NORMALES
 !CCCC---->      de los elementos        <----CCCC
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 SUBROUTINE DERIV(HMIN)
- 
     USE MGEOMETRIA
     USE MALLOCAR
 
     IMPLICIT REAL(8) (A-H,O-Z)
 
+	REAL(8) X_loc(3), Y_loc(3)
+
 	!$OMP PARALLEL &
-	!$OMP PRIVATE(X1,X2,X3,Y1,Y2,Y3,AR,IELEM,ATA1,ATA2)
+	!$OMP PRIVATE(X_loc,Y_loc,AR,IELEM,ATA1,ATA2)
 	!$OMP DO
     DO IELEM=1,NELEM
-        X1=X(N(1,IELEM)); X2=X(N(2,IELEM)); X3=X(N(3,IELEM))
-        Y1=Y(N(1,IELEM)); Y2=Y(N(2,IELEM)); Y3=Y(N(3,IELEM))
+        X_loc(1)=X(N(1,IELEM)); X_loc(2)=X(N(2,IELEM)); X_loc(3)=X(N(3,IELEM))
+        Y_loc(1)=Y(N(1,IELEM)); Y_loc(2)=Y(N(2,IELEM)); Y_loc(3)=Y(N(3,IELEM))
      
-        AR=X2*Y3+X3*Y1+X1*Y2-(X2*Y1+X3*Y2+X1*Y3)
+        AR=X_loc(2)*Y_loc(3)+X_loc(3)*Y_loc(1)+X_loc(1)*Y_loc(2)-(X_loc(2)*Y_loc(1)+X_loc(3)*Y_loc(2)+X_loc(1)*Y_loc(3))
         AR=AR/2.D0
         AREA(IELEM)=AR
      
-        DNX(1,IELEM)=(Y2-Y3)/(2.D0*AR)
-        DNX(2,IELEM)=(Y3-Y1)/(2.D0*AR)
-        DNX(3,IELEM)=(Y1-Y2)/(2.D0*AR)
-        DNY(1,IELEM)=(X3-X2)/(2.D0*AR)
-        DNY(2,IELEM)=(X1-X3)/(2.D0*AR)
-        DNY(3,IELEM)=(X2-X1)/(2.D0*AR)
+        DNX(1,IELEM)=(Y_loc(2)-Y_loc(3))/(2.D0*AR)
+        DNX(2,IELEM)=(Y_loc(3)-Y_loc(1))/(2.D0*AR)
+        DNX(3,IELEM)=(Y_loc(1)-Y_loc(2))/(2.D0*AR)
+        DNY(1,IELEM)=(X_loc(3)-X_loc(2))/(2.D0*AR)
+        DNY(2,IELEM)=(X_loc(1)-X_loc(3))/(2.D0*AR)
+        DNY(3,IELEM)=(X_loc(2)-X_loc(1))/(2.D0*AR)
      
         HH(IELEM)=DSQRT(AREA(IELEM))
-        ATA1=MIN( X3-X2 , X1-X3 , X2-X1 )
-        ATA2=MIN( Y3-Y2 , Y1-Y3 , Y2-Y1 )
+        ATA1=MIN( X_loc(3)-X_loc(2) , X_loc(1)-X_loc(3) , X_loc(2)-X_loc(1) )
+        ATA2=MIN( Y_loc(3)-Y_loc(2) , Y_loc(1)-Y_loc(3) , Y_loc(2)-Y_loc(1) )
         HHX(IELEM)=ABS(ATA1)
         HHY(IELEM)=ABS(ATA2)
     END DO
