@@ -136,6 +136,8 @@ PROGRAM NSComp2D
     REAL(4) ZZ(2),ETIME
     CHARACTER FILE*80, XCHAR
 
+	cuarto_t=0; todo_t = 0
+
     !CCCC----> TIEMPO DE CPU
     HITE=ETIME(ZZ)
     OPEN(22,FILE='FORCES_HISTORY',STATUS='UNKNOWN')
@@ -1037,126 +1039,156 @@ END SUBROUTINE DELTAT
 !CCCC------------------------------------------------------------CCCC
 !CCCC  CALCULO DE LA INTEGRAL DE LOS TERMINOS DE ESTABILIZACION  CCCC
 !CCCC------------------------------------------------------------CCCC
-SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
+SUBROUTINE CUARTO_ORDEN(U,U_n,GAMM,FR)
     USE MALLOCAR
     USE MGEOMETRIA
     IMPLICIT REAL(8) (A-H,O-Z)
-    REAL(8) U(4,NNOD),UN(4,NNOD)
+    REAL(8) U(4,NNOD),U_n(4,NNOD)
     REAL(8) GAMM(NNOD)
   
-    REAL(8) A1(3,4,3), A2(3,4,3), AUX(4,3), U_LOC(4,3), UX(4), UY(4), NX(3), NY(3), UN_TEMP(4,3)
+    REAL(8) A1(3,4,3), A2(3,4,3), Adv(4,3), U_loc(4,3), Ux(4), Uy(4), Nx(3), Ny(3), U_n_tmp(4,3)
     REAL(8) sp(3,3) !Funciones de forma
-	REAL(8) C(3), VX(3), VY(3), V_sq(3), TEMP(3), ET(3)
-    INTEGER IPOIN(3)
+	REAL(8) c(3), v_x(3), v_y(3), V_sq(3), TEMP(3), e(3)
+    INTEGER ipoin(3)
 
-    UN=0.D0
+    U_n=0.D0
 	sp(:,1) = (/ .5D0, .5D0, 0.D0 /)
 	sp(:,2) = (/ 0.D0, .5D0, .5D0 /)
     sp(:,3) = (/ .5D0, 0.D0, .5D0 /)
 
     !$OMP PARALLEL &
-    !$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,&
-    !$OMP U_LOC,PHI_LOC,VX,VY,V_sq,ET,C,A1,A2,AUX,UN_TEMP) 
+    !$OMP PRIVATE(ielem,ipoin,gama,TEMP,FMU,Nx,Ny,Ux,Uy,AR,&
+    !$OMP U_loc,PHI_LOC,v_x,v_y,V_sq,e,C,A1,A2,Adv,U_n_tmp) 
 
     !$OMP DO
-    DO IELEM=1,NELEM
-        UN_TEMP = 0.D0
-        IPOIN = N(:,IELEM)
+    DO ielem=1,nelem
+        U_n_tmp = 0.D0
+        ipoin = N(:,ielem)
 
-        GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
-        GM=GAMA-1.D0
+        gama=(GAMM(ipoin(1))+GAMM(ipoin(2))+GAMM(ipoin(3)))/3.D0
 
-        NX = DNX(:,IELEM)
-        NY = DNY(:,IELEM)
+        Nx = dNx(:,ielem)
+        Ny = dNy(:,ielem)
 
-        UX(:) = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
-        UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+        Ux(:) = U(:,ipoin(1))*Nx(1) + U(:,ipoin(2))*Nx(2) + U(:,ipoin(3))*Nx(3)
+        Uy(:) = U(:,ipoin(1))*Ny(1) + U(:,ipoin(2))*Ny(2) + U(:,ipoin(3))*Ny(3)
 
-        AR=AREA(IELEM)/3.D0
+        AR=AREA(ielem)/3.D0
         
         !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
-        U_LOC(:,1) = sp(1,1)*U(:,IPOIN(1)) + sp(2,1)*U(:,IPOIN(2)) + sp(3,1)*U(:,IPOIN(3))
-        U_LOC(:,2) = sp(1,2)*U(:,IPOIN(1)) + sp(2,2)*U(:,IPOIN(2)) + sp(3,2)*U(:,IPOIN(3))
-        U_LOC(:,3) = sp(1,3)*U(:,IPOIN(1)) + sp(2,3)*U(:,IPOIN(2)) + sp(3,3)*U(:,IPOIN(3))
+        U_loc(:,1) = sp(1,1)*U(:,ipoin(1)) + sp(2,1)*U(:,ipoin(2)) + sp(3,1)*U(:,ipoin(3))
+        U_loc(:,2) = sp(1,2)*U(:,ipoin(1)) + sp(2,2)*U(:,ipoin(2)) + sp(3,2)*U(:,ipoin(3))
+        U_loc(:,3) = sp(1,3)*U(:,ipoin(1)) + sp(2,3)*U(:,ipoin(2)) + sp(3,3)*U(:,ipoin(3))
 
         !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
-        VX(:)=U_LOC(2,:)/U_LOC(1,:)
-        VY(:)=U_LOC(3,:)/U_LOC(1,:)
-        ET(:)=U_LOC(4,:)/U_LOC(1,:)
-        V_sq(:)=VX*VX+VY*VY
-        TEMP(:)=GM/FR*(ET-.5D0*V_sq) !FR=CTE. UNIVERSAL DE LOS GASES
-        !C(:)=DSQRT(GAMA*FR*TEMP(:))
+        v_x(:)=U_loc(2,:)/U_loc(1,:)
+        v_y(:)=U_loc(3,:)/U_loc(1,:)
+        e(:)=U_loc(4,:)/U_loc(1,:)
+        V_sq(:)=v_x*v_x+v_y*v_y
+        temp(:)=(gama-1.D0)/FR*(e-.5D0*V_sq) !FR=CTE. UNIVERSAL DE LOS GASES
+        c(:)=dsqrt(gama*fr*temp(:))
 
 		!===GAUSS POINT 1===
         !A1(:,1,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,1) = (/ GM/2.D0*V_sq(1)-VX(1)*VX(1)  , (3.D0-GAMA)*VX(1)                , -GM*VY(1)        , GM         /)
-        A1(2,:,1) = (/ -VX(1)*VY(1) 			  , VY(1) 			                  , VX(1)	          , 0.D0             /)
-        A1(3,:,1) = (/ (GM*V_sq(1)-GAMA*ET(1))*VX(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VX(1)*VX(1), -GM*VX(1)*VY(1), GAMA*VX(1) /)
+        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_x(1)*v_x(1)  , (3.D0-gama)*v_x(1)                ,&
+				-(gama-1.D0)*v_y(1)        , (gama-1.D0)         /)
+        A1(2,:,1) = (/ -v_x(1)*v_y(1) 			  , v_y(1)                , v_x(1)	          , 0.D0             /)
+        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_x(1), &
+				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_x(1)*v_x(1), &
+				-(gama-1.D0)*v_x(1)*v_y(1), gama*v_x(1) /)
 
         !A2(:,1,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,1) = (/ -VX(1)*VY(1)               , VY(1)                            , VX(1)            , 0.D0 	           /)
-        A2(2,:,1) = (/ GM/2.D0*V_sq(1)-VY(1)*VY(1)  , -GM*VX(1)                        , (3.D0-GAMA)*VY(1), GM              /)
-        A2(3,:,1) = (/ (GM*V_sq(1)-GAMA*ET(1))*VY(1), -GM*VX(1)*VY(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VY(1)*VY(1),GAMA*VY(1) /)
+        A2(1,:,1) = (/ -v_x(1)*v_y(1)               , v_y(1)                  , v_x(1)         , 0.D0 	           /)
+        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_y(1)*v_y(1)  , -(gama-1.D0)*v_x(1)                        ,&
+				(3.D0-gama)*v_y(1), (gama-1.D0)              /)
+        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_y(1), -(gama-1.D0)*v_x(1)*v_y(1),&
+				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_y(1)*v_y(1),gama*v_y(1) /)
         
 		!===GAUSS POINT 2===
         !A1(:,1,2) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,2) = (/ GM/2.D0*V_sq(2)-VX(2)*VX(2)  , (3.D0-GAMA)*VX(2)                , -GM*VY(2)        , GM         /)
-        A1(2,:,2) = (/ -VX(2)*VY(2) 			  , VY(2) 			                  , VX(2)	          , 0.D0             /)
-        A1(3,:,2) = (/ (GM*V_sq(2)-GAMA*ET(2))*VX(2), GAMA*ET(2)-GM/2.D0*V_sq(2)-GM*VX(2)*VX(2), -GM*VX(2)*VY(2), GAMA*VX(2) /)
+        A1(1,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-v_x(2)*v_x(2)  , (3.D0-gama)*v_x(2)                ,&
+				-(gama-1.D0)*v_y(2)        , (gama-1.D0)         /)
+        A1(2,:,2) = (/ -v_x(2)*v_y(2) 			  , v_y(2)                   , v_x(2)	        , 0.D0             /)
+        A1(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*v_x(2), &
+				gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*v_x(2)*v_x(2),&
+				-(gama-1.D0)*v_x(2)*v_y(2), gama*v_x(2) /)
 
         !A2(:,1,2) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,2) = (/ -VX(2)*VY(2)               , VY(2)                            , VX(2)            , 0.D0 	           /)
-        A2(2,:,2) = (/ GM/2.D0*V_sq(2)-VY(2)*VY(2)  , -GM*VX(2)                        , (3.D0-GAMA)*VY(2), GM              /)
-        A2(3,:,2) = (/ (GM*V_sq(2)-GAMA*ET(2))*VY(2), -GM*VX(2)*VY(2), GAMA*ET(2)-GM/2.D0*V_sq(2)-GM*VY(2)*VY(2),GAMA*VY(2) /)
+        A2(1,:,2) = (/ -v_x(2)*v_y(2)               , v_y(2)                            ,&
+				v_x(2)            , 0.D0 	           /)
+        A2(2,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-v_y(2)*v_y(2)  , -(gama-1.D0)*v_x(2)                        ,&
+				(3.D0-gama)*v_y(2), (gama-1.D0)              /)
+        A2(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*v_y(2), -(gama-1.D0)*v_x(2)*v_y(2),&
+				gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*v_y(2)*v_y(2),gama*v_y(2) /)
 
 		!===GAUSS POINT 3===
         !A1(:,1,3) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,3) = (/ GM/2.D0*V_sq(1)-VX(1)*VX(1)  , (3.D0-GAMA)*VX(1)                , -GM*VY(1)        , GM         /)
-        A1(2,:,3) = (/ -VX(1)*VY(1) 			  , VY(1) 			                  , VX(1)	          , 0.D0             /)
-        A1(3,:,3) = (/ (GM*V_sq(1)-GAMA*ET(1))*VX(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VX(1)*VX(1), -GM*VX(1)*VY(1), GAMA*VX(1) /)
+        A1(1,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_x(1)*v_x(1)  , (3.D0-gama)*v_x(1)                , &
+				-(gama-1.D0)*v_y(1)        , (gama-1.D0)         /)
+        A1(2,:,3) = (/ -v_x(1)*v_y(1) 			  , v_y(1)                   , v_x(1)	        , 0.D0             /)
+        A1(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_x(1), &
+				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_x(1)*v_x(1),&
+				-(gama-1.D0)*v_x(1)*v_y(1), gama*v_x(1) /)
 
         !A2(:,1,3) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,3) = (/ -VX(1)*VY(1)               , VY(1)                            , VX(1)            , 0.D0 	           /)
-        A2(2,:,3) = (/ GM/2.D0*V_sq(1)-VY(1)*VY(1)  , -GM*VX(1)                        , (3.D0-GAMA)*VY(1), GM              /)
-        A2(3,:,3) = (/ (GM*V_sq(1)-GAMA*ET(1))*VY(1), -GM*VX(1)*VY(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VY(1)*VY(1),GAMA*VY(1) /)
+        A2(1,:,3) = (/ -v_x(1)*v_y(1)               , v_y(1)                , v_x(1)            , 0.D0 	           /)
+        A2(2,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_y(1)*v_y(1)  , -(gama-1.D0)*v_x(1)                        ,&
+				(3.D0-gama)*v_y(1), (gama-1.D0)              /)
+        A2(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_y(1), -(gama-1.D0)*v_x(1)*v_y(1),&
+				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_y(1)*v_y(1),gama*v_y(1) /)
 
 		!===GAUSS POINT 1===
-        AUX(1,1)=                  UX(2)                                       +                    UY(3)
-        AUX(2:4,1) = A1(:,1,1)*UX(1) + A1(:,2,1)*UX(2) + A1(:,3,1)*UX(3) + A1(:,4,1)*UX(4) + A2(:,1,1)*UY(1) + A2(:,2,1)*UY(2)&
-            + A2(:,3,1)*UY(3) + A2(:,4,1)*UY(4)
+        Adv(1,1)=                  Ux(2)                                       +                    Uy(3)
+        Adv(2:4,1) = A1(:,1,1)*Ux(1) + A1(:,2,1)*Ux(2) + A1(:,3,1)*Ux(3) + A1(:,4,1)*Ux(4) + A2(:,1,1)*Uy(1) + A2(:,2,1)*Uy(2)&
+            + A2(:,3,1)*Uy(3) + A2(:,4,1)*Uy(4)
 
 		!===GAUSS POINT 2===
-        AUX(1,2)= AUX(1,1)
-        AUX(2:4,2) = A1(:,1,2)*UX(1) + A1(:,2,2)*UX(2) + A1(:,3,2)*UX(3) + A1(:,4,2)*UX(4) + A2(:,1,2)*UY(1) + A2(:,2,2)*UY(2)&
-            + A2(:,3,2)*UY(3) + A2(:,4,2)*UY(4)
+        Adv(1,2)= Adv(1,1)
+        Adv(2:4,2) = A1(:,1,2)*Ux(1) + A1(:,2,2)*Ux(2) + A1(:,3,2)*Ux(3) + A1(:,4,2)*Ux(4) + A2(:,1,2)*Uy(1) + A2(:,2,2)*Uy(2)&
+            + A2(:,3,2)*Uy(3) + A2(:,4,2)*Uy(4)
 
-		!===GAUSS POINT 3===
-        AUX(1,3)= AUX(1,1)
-        AUX(2:4,3) = A1(:,1,3)*UX(1) + A1(:,2,3)*UX(2) + A1(:,3,3)*UX(3) + A1(:,4,3)*UX(4) + A2(:,1,3)*UY(1) + A2(:,2,3)*UY(2)&
-            + A2(:,3,3)*UY(3) + A2(:,4,3)*UY(4)
+		!===GAUSS POINT 3==
+        Adv(1,3)= Adv(1,1)
+        Adv(2:4,3) = A1(:,1,3)*Ux(1) + A1(:,2,3)*Ux(2) + A1(:,3,3)*Ux(3) + A1(:,4,3)*Ux(4) + A2(:,1,3)*Uy(1) + A2(:,2,3)*Uy(2)&
+            + A2(:,3,3)*Uy(3) + A2(:,4,3)*Uy(4)
 
-        UN_TEMP(:,1) = AUX(:,1)*sp(1,1)*AR + AUX(:,2)*sp(1,2)*AR + AUX(:,3)*sp(1,3)*AR
-        UN_TEMP(:,2) = AUX(:,1)*sp(2,1)*AR + AUX(:,2)*sp(2,2)*AR + AUX(:,3)*sp(2,3)*AR
-        UN_TEMP(:,3) = AUX(:,1)*sp(3,1)*AR + AUX(:,2)*sp(3,2)*AR + AUX(:,3)*sp(3,3)*AR
+        U_n_tmp(:,1) = Adv(:,1)*sp(1,1)*AR + Adv(:,2)*sp(1,2)*AR + Adv(:,3)*sp(1,3)*AR
+        U_n_tmp(:,2) = Adv(:,1)*sp(2,1)*AR + Adv(:,2)*sp(2,2)*AR + Adv(:,3)*sp(2,3)*AR
+        U_n_tmp(:,3) = Adv(:,1)*sp(3,1)*AR + Adv(:,2)*sp(3,2)*AR + Adv(:,3)*sp(3,3)*AR
 
-        DO I=1,4
-			!$OMP ATOMIC
-            UN(I,IPOIN(1)) = UN(I,IPOIN(1)) + UN_TEMP(I,1)
-			!$OMP ATOMIC
-            UN(I,IPOIN(2)) = UN(I,IPOIN(2)) + UN_TEMP(I,2)
-			!$OMP ATOMIC
-            UN(I,IPOIN(3)) = UN(I,IPOIN(3)) + UN_TEMP(I,3)
-        END DO
+		!$OMP ATOMIC
+        U_n(1,ipoin(1)) = U_n(1,ipoin(1)) + U_n_tmp(1,1)
+		!$OMP ATOMIC
+        U_n(2,ipoin(1)) = U_n(2,ipoin(1)) + U_n_tmp(2,1)
+		!$OMP ATOMIC
+        U_n(3,ipoin(1)) = U_n(3,ipoin(1)) + U_n_tmp(3,1)
+		!$OMP ATOMIC
+        U_n(4,ipoin(1)) = U_n(4,ipoin(1)) + U_n_tmp(4,1)
+		!$OMP ATOMIC
+        U_n(1,ipoin(2)) = U_n(1,ipoin(2)) + U_n_tmp(1,2)
+		!$OMP ATOMIC
+        U_n(2,ipoin(2)) = U_n(2,ipoin(2)) + U_n_tmp(2,2)
+		!$OMP ATOMIC
+        U_n(3,ipoin(2)) = U_n(3,ipoin(2)) + U_n_tmp(3,2)
+		!$OMP ATOMIC
+        U_n(4,ipoin(2)) = U_n(4,ipoin(2)) + U_n_tmp(4,2)
+		!$OMP ATOMIC
+        U_n(1,ipoin(3)) = U_n(1,ipoin(3)) + U_n_tmp(1,3)
+		!$OMP ATOMIC
+        U_n(2,ipoin(3)) = U_n(2,ipoin(3)) + U_n_tmp(2,3)
+		!$OMP ATOMIC
+        U_n(3,ipoin(3)) = U_n(3,ipoin(3)) + U_n_tmp(3,3)
+		!$OMP ATOMIC
+        U_n(4,ipoin(3)) = U_n(4,ipoin(3)) + U_n_tmp(4,3)
 
     END DO
     !$OMP END DO
 
     !$OMP DO
-    DO INOD=1,NNOD
-        UN(:,INOD)=-UN(:,INOD)/M(INOD)
+    DO inod=1,nnod
+        U_n(:,inod)=-U_n(:,inod)/M(inod)
     END DO
     !$OMP END DO
-
     !$OMP END PARALLEL
 
     RETURN
@@ -1228,7 +1260,7 @@ SUBROUTINE ESTAB(U,T,GAMA,FR,RMU &
         TEMP=(T(IPOIN(1))+T(IPOIN(2))+T(IPOIN(3)))/3.D0
         C=DSQRT(GM*FR*TEMP)
      
-        FMU= RMU*162.6/(TEMP-110.55)*(TEMP/273.15)**.75D0 !SUTHERLAND
+        FMU= RMU*162.6/(TEMP-110.55)*(temp/273.15)**.75D0 !SUTHERLAND
 
         DO I=1,3
             TERM_1=DABS(VX*DNX(I,IELEM)+VY*DNY(I,IELEM))
@@ -1278,130 +1310,182 @@ END SUBROUTINE ESTAB
 !CCCC------------------------------------------------------------!CCCC
 !CCCC  CALCULO DE LA INTEGRAL DE LOS TERMINOS DE ESTABILIZACION  !CCCC
 !CCCC------------------------------------------------------------!CCCC
-SUBROUTINE TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
+SUBROUTINE calcRHS(DTL,U,U_n,rhs,P,GAMM,FR,RMU,FK,FCV,TINF)
     USE MALLOCAR
     USE MGEOMETRIA
     USE MESTABILIZACION
     USE OMP_LIB
     IMPLICIT REAL(8) (A-H,O-Z)
-    REAL(8) U(4,NNOD),P(NNOD),UN(4,NNOD),T(NNOD),GAMM(NNOD)
-    REAL(8) RHS(4,NNOD)
-    REAL(8) DTL(NELEM)
-    REAL(8) ALF(3),BET(3)
-    REAL(8) A1(3,4), A2(3,4), AUX(4), AA(8), AUX_PHI(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
-    REAL(8) ARR(4), TAU(4), CHOQ(3), PHI_LOC(4), RHS_TEMP(4,3)
-    INTEGER IPOIN(3)
+    REAL(8) U(4,NNOD),P(NNOD),U_n(4,NNOD),T(NNOD),GAMM(NNOD)
+    REAL(8) rhs(4,NNOD)
+    REAL(8) dtl(NELEM)
+    REAL(8) A1(3,4,3), A2(3,4,3), Adv(4,3), AA1(4), AA2(4), Adv_phi(4,3), U_loc(4,3), Ux(4), Uy(4), Nx(3), Ny(3)
+    REAL(8) tau(4), choq(3), phi_loc(4,3), rhs_tmp(4,3)
+    REAL(8) sp(3,3) !Funciones de forma
+	REAL(8) c(3), v_x(3), v_y(3), V_sq(3), temp(3), e(3)
+    INTEGER ipoin(3)
 
-    DATA ALF/.5D0,.5D0,0.D0/
-    DATA BET/0.D0,.5D0,.5D0/
-
-    NGAUSS=3    !PTOS DE GAUSS DONDE VOY A INTERGRAR
+	sp(:,1) = (/ .5D0, .5D0, 0.D0 /)
+	sp(:,2) = (/ 0.D0, .5D0, .5D0 /)
+    sp(:,3) = (/ .5D0, 0.D0, .5D0 /)
 
     !$OMP PARALLEL &
-    !$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,HLONG,HLONGX,HLONGY,TAU,ALFA_MU,I,J,&
-    !$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,AA,AUX_PHI,CHOQ,ARR,RHS_TEMP)
+    !$OMP PRIVATE(ielem,ipoin,gama,temp,FMU,Nx,Ny,Ux,Uy,AR,HLONG,HLONGX,HLONGY,tau,ALFA_MU,I,&
+    !$OMP U_loc,phi_loc,v_x,v_y,V_sq,e,C,A1,A2,Adv,AA1,AA2,Adv_phi,choq,rhs_tmp)
 
     !$OMP DO
-    DO IELEM=1,NELEM
-        RHS_TEMP = 0.D0
-        IPOIN = N(:,IELEM)
+    DO ielem=1,nelem
+        rhs_tmp = 0.D0
+        ipoin = N(:,ielem)
 
-        GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
-        GM=GAMA-1.D0
-        TEMP=(T(IPOIN(1))+T(IPOIN(2))+T(IPOIN(3)))/3.D0
-        FMU= 1.716D-5*162.6/(TEMP-110.55)*(TEMP/273.15)**.75D0     !SUTHERLAND
+        gama=(GAMM(ipoin(1))+GAMM(ipoin(2))+GAMM(ipoin(3)))/3.D0
+        !temp=(T(ipoin(1))+T(ipoin(2))+T(ipoin(3)))/3.D0
+        !FMU= 1.716D-5*162.6/(temp-110.55)*(temp/273.15)**.75D0     !SUTHERLAND
 
-        NX = DNX(:,IELEM)
-        NY = DNY(:,IELEM)
+        Nx = dNx(:,ielem)
+        Ny = dNy(:,ielem)
 
-        UX(:) = U(:,IPOIN(1))*NX(1) + U(:,IPOIN(2))*NX(2) + U(:,IPOIN(3))*NX(3)
-        UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
+        Ux(:) = U(:,ipoin(1))*Nx(1) + U(:,ipoin(2))*Nx(2) + U(:,ipoin(3))*Nx(3)
+        Uy(:) = U(:,ipoin(1))*Ny(1) + U(:,ipoin(2))*Ny(2) + U(:,ipoin(3))*Ny(3)
 
-        AR=AREA(IELEM)*DTL(IELEM)/3.D0
+        AR=AREA(ielem)*dtl(ielem)/3.D0
         !CCCC  ----> LONG. CARACTERISTICA
-        HLONGX=HHX(IELEM)
-        HLONGY=HHY(IELEM)
-        HLONG=DSQRT(AREA(IELEM))
-        !CCCC  ----> ESTAB. TEZDUYAR
-        TAU(1)=T_SUGN1(IELEM)
-        TAU(2)=T_SUGN2(IELEM)
-        TAU(3)=T_SUGN2(IELEM)
-        TAU(4)=T_SUGN3(IELEM)
-        ALFA_MU=SHOC(IELEM)
+        HLONGX=HHX(ielem)
+        HLONGY=HHY(ielem)
+        HLONG=DSQRT(AREA(ielem))
+        !CCCC  ----> ESTAB. TEZDUyAR
+        tau(1)=T_SUGN1(ielem)
+        tau(2)=T_SUGN2(ielem)
+        tau(3)=T_SUGN2(ielem)
+        tau(4)=T_SUGN3(ielem)
+        ALFA_MU=SHOC(ielem)
+		choq(1)=ALFA_MU*AR*CTE
+        choq(2)=ALFA_MU*AR*CTE
+        choq(3)=ALFA_MU*AR*CTE
 
-        DO J=1,NGAUSS
+        !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
+        U_loc(:,1) = sp(1,1)*U(:,ipoin(1)) + sp(2,1)*U(:,ipoin(2)) + sp(3,1)*U(:,ipoin(3))
+        U_loc(:,2) = sp(1,2)*U(:,ipoin(1)) + sp(2,2)*U(:,ipoin(2)) + sp(3,2)*U(:,ipoin(3))
+        U_loc(:,3) = sp(1,3)*U(:,ipoin(1)) + sp(2,3)*U(:,ipoin(2)) + sp(3,3)*U(:,ipoin(3))
 
-            RN1=1.D0-ALF(J)-BET(J)
-            RN2=ALF(J)
-            RN3=BET(J)
+        phi_loc(:,1) = sp(1,1)*U_n(:,ipoin(1)) + sp(2,1)*U_n(:,ipoin(2)) + sp(3,1)*U_n(:,ipoin(3))
+        phi_loc(:,2) = sp(1,2)*U_n(:,ipoin(1)) + sp(2,2)*U_n(:,ipoin(2)) + sp(3,2)*U_n(:,ipoin(3))
+        phi_loc(:,3) = sp(1,3)*U_n(:,ipoin(1)) + sp(2,3)*U_n(:,ipoin(2)) + sp(3,3)*U_n(:,ipoin(3))
 
-            !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
-            U_LOC = RN1*U(:,IPOIN(1)) + RN2*U(:,IPOIN(2)) + RN3*U(:,IPOIN(3))
-            PHI_LOC = RN1*UN(:,IPOIN(1)) + RN2*UN(:,IPOIN(2)) + RN3*UN(:,IPOIN(3))
+        !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
+        v_x(:)=U_loc(2,:)/U_loc(1,:)
+        v_y(:)=U_loc(3,:)/U_loc(1,:)
+        e(:)=U_loc(4,:)/U_loc(1,:)
+        V_sq(:)=v_x*v_x+v_y*v_y
+        temp(:)=(gama-1.D0)/FR*(e-.5D0*V_sq) !FR=CTE. UNIVERSAL DE LOS GASES
+        c(:)=DSQRT(gama*FR*temp(:))
 
-            !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
-            VX=U_LOC(2)/U_LOC(1)
-            VY=U_LOC(3)/U_LOC(1)
-            ET=U_LOC(4)/U_LOC(1)
-            RMOD2=VX*VX+VY*VY
-            TEMP=GM/FR*(ET-.5D0*RMOD2) !FR=CTE. UNIVERSAL DE LOS GASES
+		!===GAUSS POINT 1===
+        !A1(0,:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_x(1)*v_x(1)  , (3.D0-gama)*v_x(1)      , -(gama-1.D0)*v_y(1)        ,&
+				(gama-1.D0)         /)
+        A1(2,:,1) = (/ -v_x(1)*v_y(1) 			  , v_y(1) 			             , v_x(1)	          , 0.D0            /)
+        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_x(1),gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_x(1)*v_x(1),&
+				-(gama-1.D0)*v_x(1)*v_y(1), gama*v_x(1) /)
+        !A2(0,:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+        A2(1,:,1) = (/ -v_x(1)*v_y(1)               , v_y(1)                        , v_x(1)         , 0.D0          /)
+        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_y(1)*v_y(1)  , -(gama-1.D0)*v_x(1)              , (3.D0-gama)*v_y(1),&
+				(gama-1.D0)              /)
+        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_y(1), -(gama-1.D0)*v_x(1)*v_y(1),&
+				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_y(1)*v_y(1),gama*v_y(1) /)
+        
+		!===GAUSS POINT 2===
+        !A1(0,:,2) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+        A1(1,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-v_x(2)*v_x(2)  , (3.D0-gama)*v_x(2)          , -(gama-1.D0)*v_y(2) ,&
+				(gama-1.D0)         /)
+        A1(2,:,2) = (/ -v_x(2)*v_y(2) 			  , v_y(2) 	                , v_x(2)	          , 0.D0             /)
+        A1(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*v_x(2),gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*v_x(2)*v_x(2),&
+				-(gama-1.D0)*v_x(2)*v_y(2), gama*v_x(2) /)
+        !A2(0,:,2) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+        A2(1,:,2) = (/ -v_x(2)*v_y(2)               , v_y(2)                        , v_x(2)        , 0.D0 	           /)
+        A2(2,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-v_y(2)*v_y(2)  , -(gama-1.D0)*v_x(2)                , (3.D0-gama)*v_y(2),&
+				(gama-1.D0)              /)
+        A2(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*v_y(2), -(gama-1.D0)*v_x(2)*v_y(2), &
+				gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*v_y(2)*v_y(2),gama*v_y(2) /)
 
-            C=DSQRT(GAMA*FR*TEMP)
+		!===GAUSS POINT 3===
+        !A1(0,:,3) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+        A1(1,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_x(1)*v_x(1)  , (3.D0-gama)*v_x(1)        , -(gama-1.D0)*v_y(1)        ,&
+				(gama-1.D0)         /)
+        A1(2,:,3) = (/ -v_x(1)*v_y(1) 			  , v_y(1)               , v_x(1)	          , 0.D0             /)
+        A1(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_x(1),gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_x(1)*v_x(1),&
+				-(gama-1.D0)*v_x(1)*v_y(1), gama*v_x(1) /)
+        !A2(0,:,3) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+        A2(1,:,3) = (/ -v_x(1)*v_y(1)               , v_y(1)                     , v_x(1)            , 0.D0            /)
+        A2(2,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-v_y(1)*v_y(1)  , -(gama-1.D0)*v_x(1)               , (3.D0-gama)*v_y(1),&
+				(gama-1.D0)              /)
+        A2(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*v_y(1), -(gama-1.D0)*v_x(1)*v_y(1), &
+				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*v_y(1)*v_y(1),gama*v_y(1) /)
 
-            !CCCC  ----> DEFINICION DE LAS MATRICES A1 Y A2
-            !A1(:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-            A1(1,:) = (/ GM/2.D0*RMOD2-VX*VX  , (3.D0-GAMA)*VX                , -GM*VY        , GM                         /)
-            A1(2,:) = (/ -VX*VY 			  , VY 			                  , VX	          , 0.D0                       /)
-            A1(3,:) = (/ (GM*RMOD2-GAMA*ET)*VX, GAMA*ET-GM/2.D0*RMOD2-GM*VX*VX, -GM*VX*VY     , GAMA*VX                    /)
+		!===GAUSS POINT 1===
+        Adv(1,1)=                  Ux(2)                                       +                    Uy(3)
+        Adv(2:4,1) = A1(:,1,1)*Ux(1) + A1(:,2,1)*Ux(2) + A1(:,3,1)*Ux(3) + A1(:,4,1)*Ux(4) + A2(:,1,1)*Uy(1) + A2(:,2,1)*Uy(2)&
+            + A2(:,3,1)*Uy(3) + A2(:,4,1)*Uy(4)
 
-            !A2(:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-            A2(1,:) = (/ -VX*VY               , VY                            , VX            , 0.D0 			           /)
-            A2(2,:) = (/ GM/2.D0*RMOD2-VY*VY  , -GM*VX                        , (3.D0-GAMA)*VY, GM  		               /)
-            A2(3,:) = (/ (GM*RMOD2-GAMA*ET)*VY, -GM*VX*VY                     , GAMA*ET-GM/2.D0*RMOD2-GM*VY*VY,    GAMA*VY /)
+		!===GAUSS POINT 2===
+        Adv(1,2)= Adv(1,1)
+        Adv(2:4,2) = A1(:,1,2)*Ux(1) + A1(:,2,2)*Ux(2) + A1(:,3,2)*Ux(3) + A1(:,4,2)*Ux(4) + A2(:,1,2)*Uy(1) + A2(:,2,2)*Uy(2)&
+            + A2(:,3,2)*Uy(3) + A2(:,4,2)*Uy(4)
 
-                        !CCCC----> TERMINOS DE ESTABILIZACION Y CAPTURA DE CHOQUE
-            ARR = AR*TAU
+		!===GAUSS POINT 3==
+        Adv(1,3)= Adv(1,1)
+        Adv(2:4,3) = A1(:,1,3)*Ux(1) + A1(:,2,3)*Ux(2) + A1(:,3,3)*Ux(3) + A1(:,4,3)*Ux(4) + A2(:,1,3)*Uy(1) + A2(:,2,3)*Uy(2)&
+            + A2(:,3,3)*Uy(3) + A2(:,4,3)*Uy(4)
+		
+		Adv_phi = Adv + phi_loc
 
-            !CCCC  ----> ARMO EL PRESSURE SWITCH
-            CHOQ(1)=ALFA_MU*AR*CTE
-            CHOQ(2)=ALFA_MU*AR*CTE
-            CHOQ(3)=ALFA_MU*AR*CTE
+        AA1(1) = (Adv_phi(2,1) + Adv_phi(2,2) + Adv_phi(2,3))*AR
+        AA1(2:4) = (A1(:,1,1)*Adv_phi(1,1) + A1(:,2,1)*Adv_phi(2,1) + A1(:,3,1)*Adv_phi(3,1) + A1(:,4,1)*Adv_phi(4,1) + &
+				   A1(:,1,2)*Adv_phi(1,2) + A1(:,2,2)*Adv_phi(2,2) + A1(:,3,2)*Adv_phi(3,2) + A1(:,4,2)*Adv_phi(4,2) + &
+				   A1(:,1,3)*Adv_phi(1,3) + A1(:,2,3)*Adv_phi(2,3) + A1(:,3,3)*Adv_phi(3,3) + A1(:,4,3)*Adv_phi(4,3))*AR
+        AA2(1) = (Adv_phi(3,1) + Adv_phi(3,2) + Adv_phi(3,3))*AR
+        AA2(2:4) = (A2(:,1,1)*Adv_phi(1,1) + A2(:,2,1)*Adv_phi(2,1) + A2(:,3,1)*Adv_phi(3,1) + A2(:,4,1)*Adv_phi(4,1) + &
+				   A2(:,1,2)*Adv_phi(1,2) + A2(:,2,2)*Adv_phi(2,2) + A2(:,3,2)*Adv_phi(3,2) + A2(:,4,2)*Adv_phi(4,2) + &
+				   A2(:,1,3)*Adv_phi(1,3) + A2(:,2,3)*Adv_phi(2,3) + A2(:,3,3)*Adv_phi(3,3) + A2(:,4,3)*Adv_phi(4,3))*AR
 
-                        !CCCC  ----> MULTIPLICO POR PARTES PARA SIMPLIFICAR EL ASUNTO
-                        !CCCC  ----> 'A' POR LAS DERIVADAS
-            AUX(1)=                  UX(2)                                       +                    UY(3)
-            AUX(2:4) = A1(:,1)*UX(1) + A1(:,2)*UX(2) + A1(:,3)*UX(3) + A1(:,4)*UX(4) + A2(:,1)*UY(1) + A2(:,2)*UY(2)&
-                + A2(:,3)*UY(3) + A2(:,4)*UY(4)
+        rhs_tmp(:,1) = (Nx(1)*AA1*tau + Ny(1)*AA2)*tau + &
+       		(Adv(:,1)*sp(1,1) + Adv(:,2)*sp(1,2) + Adv(:,3)*sp(1,3))*AR + 3*(Nx(1)*Ux + Ny(1)*Uy)*choq(1)
+        rhs_tmp(:,2) = (Nx(2)*AA1 + Ny(2)*AA2)*tau + &
+            (Adv(:,1)*sp(2,1) + Adv(:,2)*sp(2,2) + Adv(:,3)*sp(2,3))*AR + 3*(Nx(2)*Ux + Ny(2)*Uy)*choq(2)
+        rhs_tmp(:,3) = (Nx(3)*AA1 + Ny(3)*AA2)*tau + &
+            (Adv(:,1)*sp(3,1) + Adv(:,2)*sp(3,2) + Adv(:,3)*sp(3,3))*AR + 3*(Nx(3)*Ux + Ny(3)*Uy)*choq(3)
 
-            AUX_PHI = AUX + PHI_LOC
+		!$OMP ATOMIC
+        rhs(1,ipoin(1)) = rhs(1,ipoin(1)) + rhs_tmp(1,1)
+		!$OMP ATOMIC
+        rhs(2,ipoin(1)) = rhs(2,ipoin(1)) + rhs_tmp(2,1)
+		!$OMP ATOMIC
+        rhs(3,ipoin(1)) = rhs(3,ipoin(1)) + rhs_tmp(3,1)
+		!$OMP ATOMIC
+        rhs(4,ipoin(1)) = rhs(4,ipoin(1)) + rhs_tmp(4,1)
 
-                        !CCCC  ----> LO ANTERIOR POR 'A' TRANSPUESTA
-            AA(1) = AUX_PHI(2)
-            AA(2:4) = A1(:,1)*AUX_PHI(1) + A1(:,2)*AUX_PHI(2) + A1(:,3)*AUX_PHI(3) + A1(:,4)*AUX_PHI(4)
-            AA(5) = AUX_PHI(3)
-            AA(6:8) = A2(:,1)*AUX_PHI(1) + A2(:,2)*AUX_PHI(2) + A2(:,3)*AUX_PHI(3) + A2(:,4)*AUX_PHI(4)
+		!$OMP ATOMIC
+        rhs(1,ipoin(2)) = rhs(1,ipoin(2)) + rhs_tmp(1,2)
+		!$OMP ATOMIC
+        rhs(2,ipoin(2)) = rhs(2,ipoin(2)) + rhs_tmp(2,2)
+		!$OMP ATOMIC
+        rhs(3,ipoin(2)) = rhs(3,ipoin(2)) + rhs_tmp(3,2)
+		!$OMP ATOMIC
+        rhs(4,ipoin(2)) = rhs(4,ipoin(2)) + rhs_tmp(4,2)
 
-                        !CCCC  ----> ENSAMBLE DEL RIGHT HAND SIDE DEL NODO IPOIN(1)
-            RHS_TEMP(:,1) = RHS_TEMP(:,1) + (NX(1)*AA(1:4) + NY(1)*AA(5:8))*ARR(:) + &
-                AUX(:)*RN1*AR + (NX(1)*UX(:) + NY(1)*UY(:))*CHOQ(1)
-            RHS_TEMP(:,2) = RHS_TEMP(:,2) + (NX(2)*AA(1:4) + NY(2)*AA(5:8))*ARR(:) + &
-                AUX(:)*RN2*AR + (NX(2)*UX(:) + NY(2)*UY(:))*CHOQ(2)
-            RHS_TEMP(:,3) = RHS_TEMP(:,3) + (NX(3)*AA(1:4) + NY(3)*AA(5:8))*ARR(:) + &
-                AUX(:)*RN3*AR + (NX(3)*UX(:) + NY(3)*UY(:))*CHOQ(3)
-        ENDDO
-        DO I=1,4
-			!$OMP ATOMIC
-            RHS(I,IPOIN(1)) = RHS(I,IPOIN(1)) + RHS_TEMP(I,1)
-			!$OMP ATOMIC
-            RHS(I,IPOIN(2)) = RHS(I,IPOIN(2)) + RHS_TEMP(I,2)
-			!$OMP ATOMIC
-            RHS(I,IPOIN(3)) = RHS(I,IPOIN(3)) + RHS_TEMP(I,3)
-        END DO
+		!$OMP ATOMIC
+        rhs(1,ipoin(3)) = rhs(1,ipoin(3)) + rhs_tmp(1,3)
+		!$OMP ATOMIC
+        rhs(2,ipoin(3)) = rhs(2,ipoin(3)) + rhs_tmp(2,3)
+		!$OMP ATOMIC
+        rhs(3,ipoin(3)) = rhs(3,ipoin(3)) + rhs_tmp(3,3)
+		!$OMP ATOMIC
+        rhs(4,ipoin(3)) = rhs(4,ipoin(3)) + rhs_tmp(4,3)
     ENDDO
     !$OMP END DO
     !$OMP END PARALLEL
     RETURN
-END SUBROUTINE TODO
+END SUBROUTINE calcRHS
 
 !CCCC  ----> RUTINA DE INTERPOLACION PARA GAS EN EQUILIBRIO TERMOQUIMICO
 SUBROUTINE TGAS(E,RHO,P,A,T,GAMM)
@@ -2698,7 +2782,7 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
         IF(IRK.EQ.1)THEN
           
             !CALL CUARTO_ORDEN(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF,CTE)
-            CALL CUARTO_ORDEN(U1,UN,GAMM,FR)
+        	CALL CUARTO_ORDEN(U1,UN,GAMM,FR)
          
             CALL ESTAB(U,T,GAMA,FR,RMU &
                 ,DTMIN,RHOINF,TINF,UINF,VINF,GAMM)
@@ -2714,7 +2798,7 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
      
         RHS=0.D0
     
-        CALL TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
+        CALL calcRHS(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
      
         !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
         CALL FUENTE(DTL)
@@ -2919,7 +3003,7 @@ SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB)
         
     RHS=0.D0
         
-    CALL TODO(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
+    CALL calcRHS(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
 
     !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
 
