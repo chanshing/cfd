@@ -1046,7 +1046,7 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
     REAL(8) ALF(3),BET(3)
   
     REAL(8) A1(3,4), A2(3,4), AUX(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
-    REAL(8) UN_TEMP(4,3), M_local(3)
+    REAL(8) UN_TEMP(4,3)
     INTEGER IPOIN(3)
 
     DATA ALF/.5D0,.5D0,0.D0/
@@ -1058,17 +1058,13 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
 
     !$OMP PARALLEL &
     !$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,J,&
-    !$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,UN_TEMP,M_local) &
+    !$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,UN_TEMP) &
 	!$OMP REDUCTION(+:UN)
 
     !$OMP DO
     DO IELEM=1,NELEM
         UN_TEMP = 0.D0
         IPOIN = N(:,IELEM)
-
-        M_LOCAL(1)=M(IPOIN(1))
-        M_LOCAL(2)=M(IPOIN(2))
-        M_LOCAL(3)=M(IPOIN(3))
 
         GAMA=(GAMM(IPOIN(1))+GAMM(IPOIN(2))+GAMM(IPOIN(3)))/3.D0
         GM=GAMA-1.D0
@@ -2092,7 +2088,6 @@ END
 !CCCC----------------------------------------------------CCCC
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
-      
     USE MALLOCAR
     USE MLAPLACE
 
@@ -2101,23 +2096,29 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
     INTEGER N(3,NELEM)
     INTEGER IAUX(50)
     REAL(8) DNX(3,NELEM),DNY(3,NELEM),AR(NELEM)
+	integer ipoin(3)
    
     IPOS=0
     RAUX=0.D0
-    DO INOD=1,NNOD
-        IND(INOD)=0
-    END DO
+    IND=0
    
+	!$OMP PARALLEL PRIVATE(ipoin)
+
+	!$OMP DO REDUCTION(+:IND) 
     DO IELEM=1,NELEM
-        DO J=1,3
-            N1=N(J,IELEM)
-            IND(N1)=IND(N1)+1
-            INDEL(IND(N1),N1)=IELEM
-        END DO
+        ipoin=N(:,IELEM)
+        IND(ipoin(1))=IND(ipoin(1))+1
+        IND(ipoin(2))=IND(ipoin(2))+1
+        IND(ipoin(3))=IND(ipoin(3))+1
+        INDEL(IND(ipoin(1)),ipoin(1))=IELEM
+        INDEL(IND(ipoin(2)),ipoin(2))=IELEM
+        INDEL(IND(ipoin(3)),ipoin(3))=IELEM
     END DO
+	!$OMP END DO
+	!$OMP END PARALLEL
    
     DO INOD=1,NNOD
-      
+		!Build IAUX: neighbour points of INOD
         NCON=1
         IAUX(1)=INOD
         DO INDICE=1,IND(INOD)
