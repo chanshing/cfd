@@ -1043,22 +1043,20 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
     IMPLICIT REAL(8) (A-H,O-Z)
     REAL(8) U(4,NNOD),UN(4,NNOD)
     REAL(8) GAMM(NNOD)
-    REAL(8) ALF(3),BET(3)
   
-    REAL(8) A1(3,4), A2(3,4), AUX(4), U_LOC(4), UX(4), UY(4), NX(3), NY(3)
-    REAL(8) UN_TEMP(4,3)
+    REAL(8) A1(3,4,3), A2(3,4,3), AUX(4,3), U_LOC(4,3), UX(4), UY(4), NX(3), NY(3), UN_TEMP(4,3)
+    REAL(8) sp(3,3) !Funciones de forma
+	REAL(8) C(3), VX(3), VY(3), V_sq(3), TEMP(3), ET(3)
     INTEGER IPOIN(3)
 
-    DATA ALF/.5D0,.5D0,0.D0/
-    DATA BET/0.D0,.5D0,.5D0/
-  
-    NGAUSS=3    !PTOS DE GAUSS DONDE VOY A INTERGRAR
-   
     UN=0.D0
+	sp(:,1) = (/ .5D0, .5D0, 0.D0 /)
+	sp(:,2) = (/ 0.D0, .5D0, .5D0 /)
+    sp(:,3) = (/ .5D0, 0.D0, .5D0 /)
 
     !$OMP PARALLEL &
-    !$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,J,&
-    !$OMP RN1,RN2,RN3,U_LOC,PHI_LOC,VX,VY,RMOD2,ET,C,A1,A2,AUX,UN_TEMP) &
+    !$OMP PRIVATE(IELEM,IPOIN,GAMA,GM,TEMP,FMU,NX,NY,UX,UY,AR,I,&
+    !$OMP U_LOC,PHI_LOC,VX,VY,V_sq,ET,C,A1,A2,AUX,UN_TEMP) &
 	!$OMP REDUCTION(+:UN)
 
     !$OMP DO
@@ -1076,45 +1074,71 @@ SUBROUTINE CUARTO_ORDEN(U,UN,GAMM,FR)
         UY(:) = U(:,IPOIN(1))*NY(1) + U(:,IPOIN(2))*NY(2) + U(:,IPOIN(3))*NY(3)
 
         AR=AREA(IELEM)/3.D0
-    
-        DO J=1,NGAUSS
         
-            RN1=1.D0-ALF(J)-BET(J)
-            RN2=ALF(J)
-            RN3=BET(J)
+        !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
+        U_LOC(:,1) = sp(1,1)*U(:,IPOIN(1)) + sp(2,1)*U(:,IPOIN(2)) + sp(3,1)*U(:,IPOIN(3))
+        U_LOC(:,2) = sp(1,2)*U(:,IPOIN(1)) + sp(2,2)*U(:,IPOIN(2)) + sp(3,2)*U(:,IPOIN(3))
+        U_LOC(:,3) = sp(1,3)*U(:,IPOIN(1)) + sp(2,3)*U(:,IPOIN(2)) + sp(3,3)*U(:,IPOIN(3))
 
-                        !CCCC  ----> INTEGRO LAS VARIABLES EN LOS PUNTOS DE GAUSS
-            U_LOC = RN1*U(:,IPOIN(1)) + RN2*U(:,IPOIN(2)) + RN3*U(:,IPOIN(3))
+        !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
+        VX(:)=U_LOC(2,:)/U_LOC(1,:)
+        VY(:)=U_LOC(3,:)/U_LOC(1,:)
+        ET(:)=U_LOC(4,:)/U_LOC(1,:)
+        V_sq(:)=VX*VX+VY*VY
+        TEMP(:)=GM/FR*(ET-.5D0*V_sq) !FR=CTE. UNIVERSAL DE LOS GASES
+        !C(:)=DSQRT(GAMA*FR*TEMP(:))
 
-            !CCCC  ----> DEFINO VARIABLES PRIMITIVAS
-            VX=U_LOC(2)/U_LOC(1)
-            VY=U_LOC(3)/U_LOC(1)
-            ET=U_LOC(4)/U_LOC(1)
-            RMOD2=VX*VX+VY*VY
-            TEMP=GM/FR*(ET-.5D0*RMOD2) !FR=CTE. UNIVERSAL DE LOS GASES
-            C=DSQRT(GAMA*FR*TEMP)
+		!===GAUSS POINT 1===
+        !A1(:,1,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+        A1(1,:,1) = (/ GM/2.D0*V_sq(1)-VX(1)*VX(1)  , (3.D0-GAMA)*VX(1)                , -GM*VY(1)        , GM         /)
+        A1(2,:,1) = (/ -VX(1)*VY(1) 			  , VY(1) 			                  , VX(1)	          , 0.D0             /)
+        A1(3,:,1) = (/ (GM*V_sq(1)-GAMA*ET(1))*VX(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VX(1)*VX(1), -GM*VX(1)*VY(1), GAMA*VX(1) /)
 
-            !CCCC  ----> DEFINICION DE LAS MATRICES A1 Y A2
-            !A1(:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-            A1(1,:) = (/ GM/2.D0*RMOD2-VX*VX  , (3.D0-GAMA)*VX                , -GM*VY        , GM                         /)
-            A1(2,:) = (/ -VX*VY 			  , VY 			                  , VX	          , 0.D0                       /)
-            A1(3,:) = (/ (GM*RMOD2-GAMA*ET)*VX, GAMA*ET-GM/2.D0*RMOD2-GM*VX*VX, -GM*VX*VY     , GAMA*VX                    /)
-
-            !A2(:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-            A2(1,:) = (/ -VX*VY               , VY                            , VX            , 0.D0 			           /)
-            A2(2,:) = (/ GM/2.D0*RMOD2-VY*VY  , -GM*VX                        , (3.D0-GAMA)*VY, GM  		               /)
-            A2(3,:) = (/ (GM*RMOD2-GAMA*ET)*VY, -GM*VX*VY                     , GAMA*ET-GM/2.D0*RMOD2-GM*VY*VY,    GAMA*VY /)
+        !A2(:,1,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+        A2(1,:,1) = (/ -VX(1)*VY(1)               , VY(1)                            , VX(1)            , 0.D0 	           /)
+        A2(2,:,1) = (/ GM/2.D0*V_sq(1)-VY(1)*VY(1)  , -GM*VX(1)                        , (3.D0-GAMA)*VY(1), GM              /)
+        A2(3,:,1) = (/ (GM*V_sq(1)-GAMA*ET(1))*VY(1), -GM*VX(1)*VY(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VY(1)*VY(1),GAMA*VY(1) /)
         
-                        !CCCC  ----> MULTIPLICO POR PARTES PARA SIMPLIFICAR EL ASUNTO
-                        !CCCC  ----> 'A' POR LAS DERIVADAS
-            AUX(1)=                  UX(2)                                       +                    UY(3)
-            AUX(2:4) = A1(:,1)*UX(1) + A1(:,2)*UX(2) + A1(:,3)*UX(3) + A1(:,4)*UX(4) + A2(:,1)*UY(1) + A2(:,2)*UY(2)&
-                + A2(:,3)*UY(3) + A2(:,4)*UY(4)
+		!===GAUSS POINT 2===
+        !A1(:,1,2) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+        A1(1,:,2) = (/ GM/2.D0*V_sq(2)-VX(2)*VX(2)  , (3.D0-GAMA)*VX(2)                , -GM*VY(2)        , GM         /)
+        A1(2,:,2) = (/ -VX(2)*VY(2) 			  , VY(2) 			                  , VX(2)	          , 0.D0             /)
+        A1(3,:,2) = (/ (GM*V_sq(2)-GAMA*ET(2))*VX(2), GAMA*ET(2)-GM/2.D0*V_sq(2)-GM*VX(2)*VX(2), -GM*VX(2)*VY(2), GAMA*VX(2) /)
 
-            UN_TEMP(:,1) = UN_TEMP(:,1) + AUX*RN1*AR
-            UN_TEMP(:,2) = UN_TEMP(:,2) + AUX*RN2*AR
-            UN_TEMP(:,3) = UN_TEMP(:,3) + AUX*RN3*AR
-        END DO
+        !A2(:,1,2) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+        A2(1,:,2) = (/ -VX(2)*VY(2)               , VY(2)                            , VX(2)            , 0.D0 	           /)
+        A2(2,:,2) = (/ GM/2.D0*V_sq(2)-VY(2)*VY(2)  , -GM*VX(2)                        , (3.D0-GAMA)*VY(2), GM              /)
+        A2(3,:,2) = (/ (GM*V_sq(2)-GAMA*ET(2))*VY(2), -GM*VX(2)*VY(2), GAMA*ET(2)-GM/2.D0*V_sq(2)-GM*VY(2)*VY(2),GAMA*VY(2) /)
+
+		!===GAUSS POINT 3===
+        !A1(:,1,3) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
+        A1(1,:,3) = (/ GM/2.D0*V_sq(1)-VX(1)*VX(1)  , (3.D0-GAMA)*VX(1)                , -GM*VY(1)        , GM         /)
+        A1(2,:,3) = (/ -VX(1)*VY(1) 			  , VY(1) 			                  , VX(1)	          , 0.D0             /)
+        A1(3,:,3) = (/ (GM*V_sq(1)-GAMA*ET(1))*VX(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VX(1)*VX(1), -GM*VX(1)*VY(1), GAMA*VX(1) /)
+
+        !A2(:,1,3) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
+        A2(1,:,3) = (/ -VX(1)*VY(1)               , VY(1)                            , VX(1)            , 0.D0 	           /)
+        A2(2,:,3) = (/ GM/2.D0*V_sq(1)-VY(1)*VY(1)  , -GM*VX(1)                        , (3.D0-GAMA)*VY(1), GM              /)
+        A2(3,:,3) = (/ (GM*V_sq(1)-GAMA*ET(1))*VY(1), -GM*VX(1)*VY(1), GAMA*ET(1)-GM/2.D0*V_sq(1)-GM*VY(1)*VY(1),GAMA*VY(1) /)
+
+		!===GAUSS POINT 1===
+        AUX(1,1)=                  UX(2)                                       +                    UY(3)
+        AUX(2:4,1) = A1(:,1,1)*UX(1) + A1(:,2,1)*UX(2) + A1(:,3,1)*UX(3) + A1(:,4,1)*UX(4) + A2(:,1,1)*UY(1) + A2(:,2,1)*UY(2)&
+            + A2(:,3,1)*UY(3) + A2(:,4,1)*UY(4)
+
+		!===GAUSS POINT 2===
+        AUX(1,2)= AUX(1,1)
+        AUX(2:4,2) = A1(:,1,2)*UX(1) + A1(:,2,2)*UX(2) + A1(:,3,2)*UX(3) + A1(:,4,2)*UX(4) + A2(:,1,2)*UY(1) + A2(:,2,2)*UY(2)&
+            + A2(:,3,2)*UY(3) + A2(:,4,2)*UY(4)
+
+		!===GAUSS POINT 3===
+        AUX(1,3)= AUX(1,1)
+        AUX(2:4,3) = A1(:,1,3)*UX(1) + A1(:,2,3)*UX(2) + A1(:,3,3)*UX(3) + A1(:,4,3)*UX(4) + A2(:,1,3)*UY(1) + A2(:,2,3)*UY(2)&
+            + A2(:,3,3)*UY(3) + A2(:,4,3)*UY(4)
+
+        UN_TEMP(:,1) = AUX(:,1)*sp(1,1)*AR + AUX(:,2)*sp(1,2)*AR + AUX(:,3)*sp(1,3)*AR
+        UN_TEMP(:,2) = AUX(:,1)*sp(2,1)*AR + AUX(:,2)*sp(2,2)*AR + AUX(:,3)*sp(2,3)*AR
+        UN_TEMP(:,3) = AUX(:,1)*sp(3,1)*AR + AUX(:,2)*sp(3,2)*AR + AUX(:,3)*sp(3,3)*AR
 
         DO I=1,4
             UN(I,IPOIN(1)) = UN(I,IPOIN(1)) + UN_TEMP(I,1)
