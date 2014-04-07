@@ -2520,7 +2520,7 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
         RR_12=PKAPK2(RES,Z,NNOD)
      
         IF (K.EQ.1) THEN
-            PK=ZK
+            PK=Z
         ELSE
             BET=RR_12/RR_22 
             PK=Z+BET*PK
