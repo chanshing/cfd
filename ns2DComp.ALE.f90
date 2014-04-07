@@ -688,6 +688,9 @@ PROGRAM NSComp2D
     WRITE(*,*)'****----> REFINANDO <----****'
     WRITE(*,*)'****---------------------****'
 
+	print *, "cuarto_t: ", cuarto_t
+	print *, "todo_t : ", todo_t
+
     !!$  !CALL NEW_SIZE(NNOD,NELEM,N,DNX,DNY,AREA,M,HH,U &
     !!$  !     ,HH_NEW)
     !DO I=1,NNOD
@@ -2228,6 +2231,7 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
     RAUX=0.D0
     IND=0
    
+	!$OMP PARALLEL DO PRIVATE(ipoin,ielem)
     DO IELEM=1,NELEM
         ipoin=N(:,IELEM)
         IND(ipoin(1))=IND(ipoin(1))+1
@@ -2237,6 +2241,7 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
         INDEL(IND(ipoin(2)),ipoin(2))=IELEM
         INDEL(IND(ipoin(3)),ipoin(3))=IELEM
     END DO
+	!$OMP END PARALLEL DO
    
     DO INOD=1,NNOD
 		!Build IAUX: neighbour points of INOD
@@ -2533,7 +2538,7 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
         RR_12=PKAPK2(RES,Z,NNOD)
      
         IF (K.EQ.1) THEN
-            PK=ZK
+            PK=Z
         ELSE
             BET=RR_12/RR_22 
             PK=Z+BET*PK
@@ -2795,7 +2800,10 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
         IF(IRK.EQ.1)THEN
           
             !CALL CUARTO_ORDEN(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF,CTE)
+			call system_clock(start_t,rate)
         	CALL CUARTO_ORDEN(U1,UN,GAMM,FR)
+			call system_clock(end_t)
+			cuarto_t = cuarto_t + real(end_t-start_t)/real(rate)
          
             CALL ESTAB(U,T,GAMA,FR,RMU &
                 ,DTMIN,RHOINF,TINF,UINF,VINF,GAMM)
@@ -2811,7 +2819,10 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
      
         RHS=0.D0
     
+		call system_clock(start_t,rate)
         CALL calcRHS(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
+		call system_clock(end_t)
+		todo_t = todo_t + real(end_t - start_t)/real(rate)
      
         !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
         CALL FUENTE(DTL)
@@ -3000,7 +3011,10 @@ SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB)
     IF (NESTAB.EQ.4) NESTAB=1
     IF (NESTAB.EQ.2) THEN
         !CALL CUARTO_ORDEN(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF,CTE)
+		call system_clock(start_t,rate)
         CALL CUARTO_ORDEN(U1,UN,GAMM,FR)
+		call system_clock(end_t)
+		cuarto_t = cuarto_t + real(end_t-start_t)/real(rate)
 
         CALL ESTAB(U,T,GAMA,FR,RMU &
             ,DTMIN,RHOINF,TINF,UINF,VINF,GAMM)
@@ -3016,7 +3030,10 @@ SUBROUTINE ADAMSB(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA,NESTAB)
         
     RHS=0.D0
         
+	call system_clock(start_t,rate)
     CALL calcRHS(DTL,U,UN,RHS,P,GAMM,FR,RMU,FK,FCV,TINF)
+	call system_clock(end_t)
+	todo_t = todo_t + real(end_t - start_t)/real(rate)
 
     !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
 
