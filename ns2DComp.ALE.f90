@@ -2281,7 +2281,7 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
         INDEL(IND(ipoin(2)),ipoin(2))=IELEM
         INDEL(IND(ipoin(3)),ipoin(3))=IELEM
     END DO
-
+   
     DO INOD=1,NNOD
 		!Build IAUX: neighbour points of INOD
         NCON=1
@@ -2587,7 +2587,7 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
          
         RR_22=RR_12
     END DO
- 
+
     !WRITE(*,'(A,I5)')'  ITERACIONES DE GC....',K
     !WRITE(*,'(A,D14.6)')'      RESIDUO FINAL....',RR_22
       
@@ -2604,6 +2604,7 @@ SUBROUTINE RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD &
     
 	!$OMP PARALLEL DO
     DO INOD=1,NPOS
+		!$OMP ATOMIC
         RES(NN1(INOD))=RES(NN1(INOD))+S(INOD)*PRESS(NN2(INOD))
     END DO
 	!$OMP END PARALLEL DO
