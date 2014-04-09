@@ -88,7 +88,7 @@ END MODULE MAT2
 
 MODULE TIMERS
     integer rate, start_t, end_t
-    real todo_t, cuarto_t
+    real todo_t, cuarto_t, output_t, masas_t, deriv_t, laplace_t, normales_t, forces_t, newmark_t, grad_t, transf_t, estab_t
 END MODULE TIMERS
 
 PROGRAM NSComp2D
@@ -136,7 +136,8 @@ PROGRAM NSComp2D
     REAL(4) ZZ(2),ETIME
     CHARACTER FILE*80, XCHAR
 
-	cuarto_t=0; todo_t = 0
+	cuarto_t=0; todo_t = 0; output_t=0; masas_t=0; deriv_t=0; laplace_t=0; normales_t=0
+	forces_t=0; newmark_t=0; grad_t=0; transf_t=0
 
     !CCCC----> TIEMPO DE CPU
     HITE=ETIME(ZZ)
@@ -509,19 +510,31 @@ PROGRAM NSComp2D
         IF(MOVING.EQ.1)THEN
             !CCCC-----> CALCULO DE LAS NORMALES
             !CCCC---------------------------------------------------------
+			call system_clock(start_t,rate)
             CALL NORMALES
+			call system_clock(end_t)
+			normales_t= normales_t+ real(end_t-start_t)/real(rate)
 
             !CCCC----> CALCULO DE LAS DERIVADAS, EL AREA Y LA LONGITUD CARAC.
             !CCCC------------------------------------------------------------
+			call system_clock(start_t,rate)
             CALL DERIV(HMIN)
+			call system_clock(end_t)
+			deriv_t= deriv_t+ real(end_t-start_t)/real(rate)
 
             !CCCC----> CALCULO DE LAS MATRICES DE MASAS LUMPED
             !CCCC  ----------------------------------------------------------
+			call system_clock(start_t,rate)
             CALL MASAS
+			call system_clock(end_t)
+			masas_t= masas_t+ real(end_t-start_t)/real(rate)
 
             !CCCC----> CALCULO DE LOS NODOS VECINOS Y EL LAPLACIANO
             !CCCC  ------------------------------------------------------
+			call system_clock(start_t,rate)
             CALL LAPLACE(N,AREA,DNX,DNY,IAUX,NPOS)
+			call system_clock(end_t)
+			laplace_t = laplace_t + real(end_t-start_t)/real(rate)
 
         END IF
 
@@ -572,31 +585,46 @@ PROGRAM NSComp2D
 
         U = U1
      
+		call system_clock(start_t,rate)
         WRITE(7,'(I7,4E14.6)') ITER,TIME,DSQRT(ER(1)/ERR(1)),DSQRT(ER(4)/ERR(4))
+		call system_clock(end_t)
+		output_t = output_t + real(end_t-start_t)/real(rate)
 
+		call system_clock(start_t,rate)
         CALL FORCES(NSETS,NSET_NUMB,IELEM_SETS,NNOD &
             ,X,Y,P &
             ,FX,FY,RM,X_REF,Y_REF)
+		call system_clock(end_t)
+		forces_t = forces_t+ real(end_t-start_t)/real(rate)
      
         F(1)=DCOS(DISN(2))*FY(1)-DSIN(DISN(2))*FX(1)
         F(2)=RM(1)+0.1*DSIN(DISN(2))*FX(1)-DCOS(DISN(2))*0.1*FY(1)
 
         ALPHAV=DISN(2);YPOSRV=DISN(1)
+		call system_clock(start_t,rate)
         CALL NEWMARK_METHOD(DTMIN)
+		call system_clock(end_t)
+		newmark_t= newmark_t+ real(end_t-start_t)/real(rate)
      
         ALPHA=DISN(2)-ALPHAV; YPOSR=DISN(1) -YPOSRV
         OPEN(17,FILE='DESPLAZAMIENTO',STATUS='UNKNOWN')
         WRITE(17,*)ITER,DISN(1),DISN(2)
+		call system_clock(start_t,rate)
         CALL TRANSF(ALPHA,YPOSR,XREF,YREF)
+		call system_clock(end_t)
+		transf_t= transf_t+ real(end_t-start_t)/real(rate)
       
         POS_AUX(1:NMOVE)=DXPOS(1:NMOVE)
          !NODOS SIN MOVIMIENTO
         POS_AUX(1+NMOVE:NFIX_MOVE+NMOVE)=0.D0
       
         B=0.D0
+		call system_clock(start_t,rate)
         CALL GRADCONJ2(S,XPOS,B,NN1,NN2,NNOD,NPOS &
             ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
             ,PK,APK,Z)
+		call system_clock(end_t)
+		grad_t= grad_t+ real(end_t-start_t)/real(rate)
              
         X=X+XPOS
         W_X=XPOS/DTMIN
@@ -604,10 +632,13 @@ PROGRAM NSComp2D
         POS_AUX(1:NMOVE)=DYPOS(1:NMOVE)
      
         B=0.D0
+		call system_clock(start_t,rate)
         CALL GRADCONJ2(S,YPOS,B,NN1,NN2,NNOD,NPOS &
             ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
             ,PK,APK,Z)
-             
+		call system_clock(end_t)
+		grad_t= grad_t+ real(end_t-start_t)/real(rate)
+	
         Y=Y+YPOS
         W_Y=YPOS/DTMIN
      
@@ -689,7 +720,17 @@ PROGRAM NSComp2D
     WRITE(*,*)'****---------------------****'
 
 	print *, "cuarto_t: ", cuarto_t
+	print *, "estab_t: ", estab_t
 	print *, "todo_t : ", todo_t
+	print *, "output_t: ", output_t
+	print *, "masas_t: ", masas_t
+	print *, "deriv_t: ", deriv_t
+	print *, "normales_t: ", normales_t
+	print *, "laplace_t: ", laplace_t
+	print *, "forces_t: ", forces_t
+	print *, "newmark_t: ", newmark_t
+	print *, "transf_t: ", transf_t
+	print *, "grad_t: ", grad_t
 
     !!$  !CALL NEW_SIZE(NNOD,NELEM,N,DNX,DNY,AREA,M,HH,U &
     !!$  !     ,HH_NEW)
@@ -2117,7 +2158,7 @@ SUBROUTINE FUENTE(dtl)
     REAL(8) dtl(nelem)
     real(8) rhs_tmp(4,3), Ux(4), Uy(4), Nx(3), Ny(3)
 	real(8) sp(3,3)
-	real(8) Wx(3), Wy(3)
+	real(8) wx(3), Wy(3)
     integer ipoin(3)
   
 	sp(:,1) = (/ .5D0, .5D0, 0.D0 /)
@@ -2125,7 +2166,7 @@ SUBROUTINE FUENTE(dtl)
     sp(:,3) = (/ .5D0, 0.D0, .5D0 /)
   
     !$OMP PARALLEL &
-    !$OMP PRIVATE(ielem,Ux,Uy,AR,Wx,Wy,rhs_tmp,ipoin)
+    !$OMP PRIVATE(ielem,Ux,Uy,AR,wx,Wy,rhs_tmp,ipoin)
 
     !$OMP DO
     DO ielem=1,nelem
@@ -2138,18 +2179,18 @@ SUBROUTINE FUENTE(dtl)
         AR=AREA(ielem)*dtl(ielem)/3.D0
      
 		!===GAUSS POINT 1===
-        WX(1)=sp(1,1)*W_X(ipoin(1))+sp(2,1)*W_X(ipoin(2))+sp(3,1)*W_X(ipoin(3))
-        WY(1)=sp(1,1)*W_Y(ipoin(1))+sp(2,1)*W_Y(ipoin(2))+sp(3,1)*W_Y(ipoin(3))
+        wx(1)=sp(1,1)*W_X(ipoin(1))+sp(2,1)*W_X(ipoin(2))+sp(3,1)*W_X(ipoin(3))
+        wy(1)=sp(1,1)*W_Y(ipoin(1))+sp(2,1)*W_Y(ipoin(2))+sp(3,1)*W_Y(ipoin(3))
 		!===GAUSS POINT 2===
-        WX(2)=sp(1,2)*W_X(ipoin(1))+sp(2,2)*W_X(ipoin(2))+sp(3,2)*W_X(ipoin(3))
-        WY(2)=sp(1,2)*W_Y(ipoin(1))+sp(2,2)*W_Y(ipoin(2))+sp(3,2)*W_Y(ipoin(3))
+        wx(2)=sp(1,2)*W_X(ipoin(1))+sp(2,2)*W_X(ipoin(2))+sp(3,2)*W_X(ipoin(3))
+        wy(2)=sp(1,2)*W_Y(ipoin(1))+sp(2,2)*W_Y(ipoin(2))+sp(3,2)*W_Y(ipoin(3))
 		!===GAUSS POINT 3===
-        WX(3)=sp(1,3)*W_X(ipoin(1))+sp(2,3)*W_X(ipoin(2))+sp(3,3)*W_X(ipoin(3))
-        WY(3)=sp(1,3)*W_Y(ipoin(1))+sp(2,3)*W_Y(ipoin(2))+sp(3,3)*W_Y(ipoin(3))
+        wx(3)=sp(1,3)*W_X(ipoin(1))+sp(2,3)*W_X(ipoin(2))+sp(3,3)*W_X(ipoin(3))
+        wy(3)=sp(1,3)*W_Y(ipoin(1))+sp(2,3)*W_Y(ipoin(2))+sp(3,3)*W_Y(ipoin(3))
 
-        rhs_tmp(:,1)=-AR*(sp(1,1)*(Ux*WX(1) + Uy*WY(1)) + sp(1,2)*(Ux*WX(2) + Uy*WY(2)) + sp(1,3)*(Ux*WX(3) + Uy*WY(3)))
-        rhs_tmp(:,2)=-AR*(sp(2,1)*(Ux*WX(1) + Uy*WY(1)) + sp(2,2)*(Ux*WX(2) + Uy*WY(2)) + sp(2,3)*(Ux*WX(3) + Uy*WY(3)))
-        rhs_tmp(:,3)=-AR*(sp(3,1)*(Ux*WX(1) + Uy*WY(1)) + sp(3,2)*(Ux*WX(2) + Uy*WY(2)) + sp(3,3)*(Ux*WX(3) + Uy*WY(3)))
+        rhs_tmp(:,1)=-AR*(sp(1,1)*(Ux*wx(1) + Uy*wy(1)) + sp(1,2)*(Ux*wx(2) + Uy*wy(2)) + sp(1,3)*(Ux*wx(3) + Uy*wy(3)))
+        rhs_tmp(:,2)=-AR*(sp(2,1)*(Ux*wx(1) + Uy*wy(1)) + sp(2,2)*(Ux*wx(2) + Uy*wy(2)) + sp(2,3)*(Ux*wx(3) + Uy*wy(3)))
+        rhs_tmp(:,3)=-AR*(sp(3,1)*(Ux*wx(1) + Uy*wy(1)) + sp(3,2)*(Ux*wx(2) + Uy*wy(2)) + sp(3,3)*(Ux*wx(3) + Uy*wy(3)))
 
 		!$OMP ATOMIC
         rhs(1,ipoin(1)) = rhs(1,ipoin(1)) + rhs_tmp(1,1)
@@ -2231,7 +2272,6 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
     RAUX=0.D0
     IND=0
    
-	!$OMP PARALLEL DO PRIVATE(ipoin,ielem)
     DO IELEM=1,NELEM
         ipoin=N(:,IELEM)
         IND(ipoin(1))=IND(ipoin(1))+1
@@ -2241,8 +2281,7 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
         INDEL(IND(ipoin(2)),ipoin(2))=IELEM
         INDEL(IND(ipoin(3)),ipoin(3))=IELEM
     END DO
-	!$OMP END PARALLEL DO
-   
+
     DO INOD=1,NNOD
 		!Build IAUX: neighbour points of INOD
         NCON=1
@@ -2505,37 +2544,33 @@ END SUBROUTINE ESTIMADOR_ERR
 SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
     ,IFIXPRES,RFIXP_VALUE,IFIXP,RES,ADIAG &
     ,PK,APK,Z)
-  
     IMPLICIT REAL(8) (A-H,O-Z)
-  
     INTEGER NN1(NPOS),NN2(NPOS),IFIXPRES(IFIXP)
     REAL(8) RES(NNOD),PRESS(NNOD),S(NPOS)
     REAL(8) B(NNOD),ADIAG(NNOD),RFIXP_VALUE(IFIXP)
     !CCCC ---> AUXILIARES
     REAL(8)PK(NNOD),APK(NNOD),Z(NNOD)
-  
+
     CONJERR=1.D-10
 
-    DO IN=1,IFIXP
-        PRESS(IFIXPRES(IN))=RFIXP_VALUE(IN)
-    END DO
+    PRESS(IFIXPRES(:))=RFIXP_VALUE(:)
   
     CALL RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
 
     RES=B-RES
  
-    DO IN=1,IFIXP
-        RES(IFIXPRES(IN))=0.D0
-    END DO
+    RES(IFIXPRES(:))=0.D0
   
-    RR_12=PKAPK2(RES,RES,NNOD)
+    RR_12 = sum(RES*RES)
+
     K=0
+
     DO WHILE (DABS(RR_12).GT.CONJERR.AND.K.LT.1000)
      
         K=K+1
         Z=RES/ADIAG
      
-        RR_12=PKAPK2(RES,Z,NNOD)
+        RR_12 = sum(RES*Z)
      
         IF (K.EQ.1) THEN
             PK=Z
@@ -2545,13 +2580,12 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
         END IF
          
         CALL RESIDUO2(APK,S,PK,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
-        ALF=RR_12/PKAPK2(APK,PK,NNOD)
+        ALF=RR_12/sum(APK*PK)
          
         PRESS=PRESS+ALF*PK 
         RES=RES-ALF*APK 
          
         RR_22=RR_12
-   
     END DO
  
     !WRITE(*,'(A,I5)')'  ITERACIONES DE GC....',K
@@ -2562,21 +2596,19 @@ END SUBROUTINE GRADCONJ2
       
 SUBROUTINE RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD &
     ,IFIXPRES,IFIXP)
-      
     IMPLICIT REAL(8) (A-H,O-Z)
-  
     INTEGER NN1(NPOS),NN2(NPOS),IFIXPRES(IFIXP)
     REAL(8) S(NPOS),RES(NNOD),PRESS(NNOD)
   
     RES=0.D0
     
+	!$OMP PARALLEL DO
     DO INOD=1,NPOS
         RES(NN1(INOD))=RES(NN1(INOD))+S(INOD)*PRESS(NN2(INOD))
     END DO
+	!$OMP END PARALLEL DO
   
-    DO IN=1,IFIXP
-        RES(IFIXPRES(IN))=PRESS(IFIXPRES(IN))*1.D30
-    END DO
+   	RES(IFIXPRES(:))=PRESS(IFIXPRES(:))*1.D30
   
     RETURN
 END SUBROUTINE RESIDUO2
@@ -2805,8 +2837,11 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
 			call system_clock(end_t)
 			cuarto_t = cuarto_t + real(end_t-start_t)/real(rate)
          
+			call system_clock(start_t,rate)
             CALL ESTAB(U,T,GAMA,FR,RMU &
                 ,DTMIN,RHOINF,TINF,UINF,VINF,GAMM)
+			call system_clock(end_t)
+			estab_t= estab_t+ real(end_t-start_t)/real(rate)
         
         END IF
      
@@ -2936,38 +2971,38 @@ SUBROUTINE RK(DTMIN,NPOS,GAMM,DTL,XPOS,YPOS,NRK,NNMOVE,BANDERA)
     !CCCC  ----> CONDICIONES DE CONTORNO <----  CCCC
     !CCCC---------------------------------------CCCC
      
-    !CCCC----> VELOCIDADES IMPUESTAS
-    !CCCC---------------------------
-    CALL FIXVEL
+    	!CCCC----> VELOCIDADES IMPUESTAS
+    	!CCCC---------------------------
+		CALL FIXVEL
        
-    !CCCC----> CORRECCION DE LAS VELOCIDADES NORMALES
-    !CCCC--------------------------------------------
-    CALL NORMALVEL
+    	!CCCC----> CORRECCION DE LAS VELOCIDADES NORMALES
+    	!CCCC--------------------------------------------
+    	CALL NORMALVEL
          
-    !CCCC----> VALORES IMPUESTOS
-    !CCCC-----------------------
-    CALL FIX(FR,GAMM,GAMA)
+    	!CCCC----> VALORES IMPUESTOS
+    	!CCCC-----------------------
+    	CALL FIX(FR,GAMM,GAMA)
     
-    !$OMP PARALLEL DO 
-    DO INOD=1,NNOD
-        U1(1,INOD)=RHO(INOD)
-        U1(2,INOD)=VEL_X(INOD)*RHO(INOD)
-        U1(3,INOD)=VEL_Y(INOD)*RHO(INOD)
-        U1(4,INOD)=E(INOD)*RHO(INOD)
-    END DO
-    !$OMP END PARALLEL DO
+		!$OMP PARALLEL DO 
+		DO INOD=1,NNOD
+        	U1(1,INOD)=RHO(INOD)
+        	U1(2,INOD)=VEL_X(INOD)*RHO(INOD)
+        	U1(3,INOD)=VEL_Y(INOD)*RHO(INOD)
+        	U1(4,INOD)=E(INOD)*RHO(INOD)
+		END DO
+		!$OMP END PARALLEL DO
 
-    !U2=U1 !Comentado ya que U2 no parece ser usado en nada.
+		!U2=U1 !Comentado ya que U2 no parece ser usado en nada.
 
-END DO
+	END DO
 
-IF (BANDERA.EQ.2) THEN
-    RHS3=RHS
-ELSE IF(BANDERA.EQ.3) THEN
-    RHS2=RHS
-ELSE IF(BANDERA.EQ.4) THEN
-    RHS1=RHS
-END IF
+	IF (BANDERA.EQ.2) THEN
+    	RHS3=RHS
+	ELSE IF(BANDERA.EQ.3) THEN
+    	RHS2=RHS
+	ELSE IF(BANDERA.EQ.4) THEN
+    	RHS1=RHS
+	END IF
 
 END SUBROUTINE RK
 
