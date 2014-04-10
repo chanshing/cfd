@@ -1102,7 +1102,7 @@ SUBROUTINE CUARTO_ORDEN(U,U_n,GAMM,FR)
 
     !$OMP PARALLEL &
     !$OMP PRIVATE(ielem,ipoin,gama,TEMP,FMU,Nx,Ny,Ux,Uy,AR,&
-    !$OMP U_loc,PHI_LOC,vx,vy,V_sq,e,C,A1,A2,Adv,U_n_tmp) 
+    !$OMP U_loc,PHI_LOC,vx,vy,V_sq,e,C,A1,A2,Adv,U_n_tmp,i)
 
     !$OMP DO
     DO ielem=1,nelem
@@ -1132,98 +1132,42 @@ SUBROUTINE CUARTO_ORDEN(U,U_n,GAMM,FR)
         temp(:)=(gama-1.D0)/FR*(e-.5D0*V_sq) !FR=CTE. UNIVERSAL DE LOS GASES
         c(:)=dsqrt(gama*fr*temp(:))
 
-		!===GAUSS POINT 1===
+		!===GAUSS QUAD===
+		do i=1,3
         !A1(:,1,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-vx(1)*vx(1)  , (3.D0-gama)*vx(1)                ,&
-				-(gama-1.D0)*vy(1)        , (gama-1.D0)         /)
-        A1(2,:,1) = (/ -vx(1)*vy(1) 			  , vy(1)                , vx(1)	          , 0.D0             /)
-        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vx(1), &
-				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vx(1)*vx(1), &
-				-(gama-1.D0)*vx(1)*vy(1), gama*vx(1) /)
-
+        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vx(i)*vx(i)  , (3.D0-gama)*vx(i)                ,&
+				-(gama-1.D0)*vy(i)        , (gama-1.D0)         /)
+        A1(2,:,1) = (/ -vx(i)*vy(i) 			  , vy(i)                , vx(i)	          , 0.D0             /)
+        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vx(i), &
+				gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vx(i)*vx(i), &
+				-(gama-1.D0)*vx(i)*vy(i), gama*vx(i) /)
         !A2(:,1,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,1) = (/ -vx(1)*vy(1)               , vy(1)                  , vx(1)         , 0.D0 	           /)
-        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-vy(1)*vy(1)  , -(gama-1.D0)*vx(1)                        ,&
-				(3.D0-gama)*vy(1), (gama-1.D0)              /)
-        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vy(1), -(gama-1.D0)*vx(1)*vy(1),&
-				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vy(1)*vy(1),gama*vy(1) /)
-        
-		!===GAUSS POINT 2===
-        !A1(:,1,2) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-vx(2)*vx(2)  , (3.D0-gama)*vx(2)                ,&
-				-(gama-1.D0)*vy(2)        , (gama-1.D0)         /)
-        A1(2,:,2) = (/ -vx(2)*vy(2) 			  , vy(2)                   , vx(2)	        , 0.D0             /)
-        A1(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*vx(2), &
-				gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*vx(2)*vx(2),&
-				-(gama-1.D0)*vx(2)*vy(2), gama*vx(2) /)
+        A2(1,:,1) = (/ -vx(i)*vy(i)               , vy(i)                  , vx(i)         , 0.D0 	           /)
+        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vy(i)*vy(i)  , -(gama-1.D0)*vx(i)                        ,&
+				(3.D0-gama)*vy(i), (gama-1.D0)              /)
+        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vy(i), -(gama-1.D0)*vx(i)*vy(i),&
+				gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vy(i)*vy(i),gama*vy(i) /)
 
-        !A2(:,1,2) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,2) = (/ -vx(2)*vy(2)               , vy(2)                            ,&
-				vx(2)            , 0.D0 	           /)
-        A2(2,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-vy(2)*vy(2)  , -(gama-1.D0)*vx(2)                        ,&
-				(3.D0-gama)*vy(2), (gama-1.D0)              /)
-        A2(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*vy(2), -(gama-1.D0)*vx(2)*vy(2),&
-				gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*vy(2)*vy(2),gama*vy(2) /)
-
-		!===GAUSS POINT 3===
-        !A1(:,1,3) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-vx(1)*vx(1)  , (3.D0-gama)*vx(1)                , &
-				-(gama-1.D0)*vy(1)        , (gama-1.D0)         /)
-        A1(2,:,3) = (/ -vx(1)*vy(1) 			  , vy(1)                   , vx(1)	        , 0.D0             /)
-        A1(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vx(1), &
-				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vx(1)*vx(1),&
-				-(gama-1.D0)*vx(1)*vy(1), gama*vx(1) /)
-
-        !A2(:,1,3) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,3) = (/ -vx(1)*vy(1)               , vy(1)                , vx(1)            , 0.D0 	           /)
-        A2(2,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-vy(1)*vy(1)  , -(gama-1.D0)*vx(1)                        ,&
-				(3.D0-gama)*vy(1), (gama-1.D0)              /)
-        A2(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vy(1), -(gama-1.D0)*vx(1)*vy(1),&
-				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vy(1)*vy(1),gama*vy(1) /)
-
-		!===GAUSS POINT 1===
-        Adv(1,1)=                  Ux(2)                                       +                    Uy(3)
-        Adv(2:4,1) = A1(:,1,1)*Ux(1) + A1(:,2,1)*Ux(2) + A1(:,3,1)*Ux(3) + A1(:,4,1)*Ux(4) + A2(:,1,1)*Uy(1) + A2(:,2,1)*Uy(2)&
-            + A2(:,3,1)*Uy(3) + A2(:,4,1)*Uy(4)
-
-		!===GAUSS POINT 2===
-        Adv(1,2)= Adv(1,1)
-        Adv(2:4,2) = A1(:,1,2)*Ux(1) + A1(:,2,2)*Ux(2) + A1(:,3,2)*Ux(3) + A1(:,4,2)*Ux(4) + A2(:,1,2)*Uy(1) + A2(:,2,2)*Uy(2)&
-            + A2(:,3,2)*Uy(3) + A2(:,4,2)*Uy(4)
-
-		!===GAUSS POINT 3==
-        Adv(1,3)= Adv(1,1)
-        Adv(2:4,3) = A1(:,1,3)*Ux(1) + A1(:,2,3)*Ux(2) + A1(:,3,3)*Ux(3) + A1(:,4,3)*Ux(4) + A2(:,1,3)*Uy(1) + A2(:,2,3)*Uy(2)&
-            + A2(:,3,3)*Uy(3) + A2(:,4,3)*Uy(4)
+        Adv(1,i)=                  Ux(2)                                       +                    Uy(3)
+        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4) + A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2)&
+            + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
+		end do
+		!===END GAUSS QUAD===
 
         U_n_tmp(:,1) = Adv(:,1)*sp(1,1)*AR + Adv(:,2)*sp(1,2)*AR + Adv(:,3)*sp(1,3)*AR
         U_n_tmp(:,2) = Adv(:,1)*sp(2,1)*AR + Adv(:,2)*sp(2,2)*AR + Adv(:,3)*sp(2,3)*AR
         U_n_tmp(:,3) = Adv(:,1)*sp(3,1)*AR + Adv(:,2)*sp(3,2)*AR + Adv(:,3)*sp(3,3)*AR
 
+		do i=1,3
 		!$OMP ATOMIC
-        U_n(1,ipoin(1)) = U_n(1,ipoin(1)) + U_n_tmp(1,1)
+        U_n(1,ipoin(i)) = U_n(1,ipoin(i)) + U_n_tmp(1,i)
 		!$OMP ATOMIC
-        U_n(2,ipoin(1)) = U_n(2,ipoin(1)) + U_n_tmp(2,1)
+        U_n(2,ipoin(i)) = U_n(2,ipoin(i)) + U_n_tmp(2,i)
 		!$OMP ATOMIC
-        U_n(3,ipoin(1)) = U_n(3,ipoin(1)) + U_n_tmp(3,1)
+        U_n(3,ipoin(i)) = U_n(3,ipoin(i)) + U_n_tmp(3,i)
 		!$OMP ATOMIC
-        U_n(4,ipoin(1)) = U_n(4,ipoin(1)) + U_n_tmp(4,1)
-		!$OMP ATOMIC
-        U_n(1,ipoin(2)) = U_n(1,ipoin(2)) + U_n_tmp(1,2)
-		!$OMP ATOMIC
-        U_n(2,ipoin(2)) = U_n(2,ipoin(2)) + U_n_tmp(2,2)
-		!$OMP ATOMIC
-        U_n(3,ipoin(2)) = U_n(3,ipoin(2)) + U_n_tmp(3,2)
-		!$OMP ATOMIC
-        U_n(4,ipoin(2)) = U_n(4,ipoin(2)) + U_n_tmp(4,2)
-		!$OMP ATOMIC
-        U_n(1,ipoin(3)) = U_n(1,ipoin(3)) + U_n_tmp(1,3)
-		!$OMP ATOMIC
-        U_n(2,ipoin(3)) = U_n(2,ipoin(3)) + U_n_tmp(2,3)
-		!$OMP ATOMIC
-        U_n(3,ipoin(3)) = U_n(3,ipoin(3)) + U_n_tmp(3,3)
-		!$OMP ATOMIC
-        U_n(4,ipoin(3)) = U_n(4,ipoin(3)) + U_n_tmp(4,3)
+        U_n(4,ipoin(i)) = U_n(4,ipoin(i)) + U_n_tmp(4,i)
+		end do
 
     END DO
     !$OMP END DO
@@ -1424,63 +1368,27 @@ SUBROUTINE calcRHS(DTL,U,U_n,rhs,P,GAMM,FR,RMU,FK,FCV,TINF)
         temp(:)=(gama-1.D0)/FR*(e-.5D0*V_sq) !FR=CTE. UNIVERSAL DE LOS GASES
         c(:)=DSQRT(gama*FR*temp(:))
 
-		!===GAUSS POINT 1===
+		!===GAUSS QUAD===
+		do i=1,3 
         !A1(0,:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-vx(1)*vx(1)  , (3.D0-gama)*vx(1)      , -(gama-1.D0)*vy(1)        ,&
+        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vx(i)*vx(i)  , (3.D0-gama)*vx(i)      , -(gama-1.D0)*vy(i)        ,&
 				(gama-1.D0)         /)
-        A1(2,:,1) = (/ -vx(1)*vy(1) 			  , vy(1) 			             , vx(1)	          , 0.D0            /)
-        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vx(1),gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vx(1)*vx(1),&
-				-(gama-1.D0)*vx(1)*vy(1), gama*vx(1) /)
+        A1(2,:,1) = (/ -vx(i)*vy(i) 			  , vy(i) 			             , vx(i)	          , 0.D0            /)
+        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vx(i),gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vx(i)*vx(i),&
+				-(gama-1.D0)*vx(i)*vy(i), gama*vx(i) /)
         !A2(0,:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,1) = (/ -vx(1)*vy(1)               , vy(1)                        , vx(1)         , 0.D0          /)
-        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(1)-vy(1)*vy(1)  , -(gama-1.D0)*vx(1)              , (3.D0-gama)*vy(1),&
+        A2(1,:,1) = (/ -vx(i)*vy(i)               , vy(i)                        , vx(i)         , 0.D0          /)
+        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vy(i)*vy(i)  , -(gama-1.D0)*vx(i)              , (3.D0-gama)*vy(i),&
 				(gama-1.D0)              /)
-        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vy(1), -(gama-1.D0)*vx(1)*vy(1),&
-				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vy(1)*vy(1),gama*vy(1) /)
-        
-		!===GAUSS POINT 2===
-        !A1(0,:,2) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-vx(2)*vx(2)  , (3.D0-gama)*vx(2)          , -(gama-1.D0)*vy(2) ,&
-				(gama-1.D0)         /)
-        A1(2,:,2) = (/ -vx(2)*vy(2) 			  , vy(2) 	                , vx(2)	          , 0.D0             /)
-        A1(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*vx(2),gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*vx(2)*vx(2),&
-				-(gama-1.D0)*vx(2)*vy(2), gama*vx(2) /)
-        !A2(0,:,2) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,2) = (/ -vx(2)*vy(2)               , vy(2)                        , vx(2)        , 0.D0 	           /)
-        A2(2,:,2) = (/ (gama-1.D0)/2.D0*V_sq(2)-vy(2)*vy(2)  , -(gama-1.D0)*vx(2)                , (3.D0-gama)*vy(2),&
-				(gama-1.D0)              /)
-        A2(3,:,2) = (/ ((gama-1.D0)*V_sq(2)-gama*e(2))*vy(2), -(gama-1.D0)*vx(2)*vy(2), &
-				gama*e(2)-(gama-1.D0)/2.D0*V_sq(2)-(gama-1.D0)*vy(2)*vy(2),gama*vy(2) /)
+        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vy(i), -(gama-1.D0)*vx(i)*vy(i),&
+				gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vy(i)*vy(i),gama*vy(i) /)
 
-		!===GAUSS POINT 3===
-        !A1(0,:,3) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-vx(1)*vx(1)  , (3.D0-gama)*vx(1)        , -(gama-1.D0)*vy(1)        ,&
-				(gama-1.D0)         /)
-        A1(2,:,3) = (/ -vx(1)*vy(1) 			  , vy(1)               , vx(1)	          , 0.D0             /)
-        A1(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vx(1),gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vx(1)*vx(1),&
-				-(gama-1.D0)*vx(1)*vy(1), gama*vx(1) /)
-        !A2(0,:,3) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,3) = (/ -vx(1)*vy(1)               , vy(1)                     , vx(1)            , 0.D0            /)
-        A2(2,:,3) = (/ (gama-1.D0)/2.D0*V_sq(1)-vy(1)*vy(1)  , -(gama-1.D0)*vx(1)               , (3.D0-gama)*vy(1),&
-				(gama-1.D0)              /)
-        A2(3,:,3) = (/ ((gama-1.D0)*V_sq(1)-gama*e(1))*vy(1), -(gama-1.D0)*vx(1)*vy(1), &
-				gama*e(1)-(gama-1.D0)/2.D0*V_sq(1)-(gama-1.D0)*vy(1)*vy(1),gama*vy(1) /)
+        Adv(1,i)=                  Ux(2)                                       +                    Uy(3)
+        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4) + A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2)&
+            + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
+		end do 
+		!===END GAUSS QUAD===
 
-		!===GAUSS POINT 1===
-        Adv(1,1)=                  Ux(2)                                       +                    Uy(3)
-        Adv(2:4,1) = A1(:,1,1)*Ux(1) + A1(:,2,1)*Ux(2) + A1(:,3,1)*Ux(3) + A1(:,4,1)*Ux(4) + A2(:,1,1)*Uy(1) + A2(:,2,1)*Uy(2)&
-            + A2(:,3,1)*Uy(3) + A2(:,4,1)*Uy(4)
-
-		!===GAUSS POINT 2===
-        Adv(1,2)= Adv(1,1)
-        Adv(2:4,2) = A1(:,1,2)*Ux(1) + A1(:,2,2)*Ux(2) + A1(:,3,2)*Ux(3) + A1(:,4,2)*Ux(4) + A2(:,1,2)*Uy(1) + A2(:,2,2)*Uy(2)&
-            + A2(:,3,2)*Uy(3) + A2(:,4,2)*Uy(4)
-
-		!===GAUSS POINT 3==
-        Adv(1,3)= Adv(1,1)
-        Adv(2:4,3) = A1(:,1,3)*Ux(1) + A1(:,2,3)*Ux(2) + A1(:,3,3)*Ux(3) + A1(:,4,3)*Ux(4) + A2(:,1,3)*Uy(1) + A2(:,2,3)*Uy(2)&
-            + A2(:,3,3)*Uy(3) + A2(:,4,3)*Uy(4)
-		
 		Adv_phi = Adv + phi_loc
 
         AA1(1) = (Adv_phi(2,1) + Adv_phi(2,2) + Adv_phi(2,3))*AR
@@ -1492,39 +1400,24 @@ SUBROUTINE calcRHS(DTL,U,U_n,rhs,P,GAMM,FR,RMU,FK,FCV,TINF)
 				   A2(:,1,2)*Adv_phi(1,2) + A2(:,2,2)*Adv_phi(2,2) + A2(:,3,2)*Adv_phi(3,2) + A2(:,4,2)*Adv_phi(4,2) + &
 				   A2(:,1,3)*Adv_phi(1,3) + A2(:,2,3)*Adv_phi(2,3) + A2(:,3,3)*Adv_phi(3,3) + A2(:,4,3)*Adv_phi(4,3))*AR
 
-        rhs_tmp(:,1) = (Nx(1)*AA1*tau + Ny(1)*AA2)*tau + &
+        rhs_tmp(:,1) = (Nx(1)*AA1 + Ny(1)*AA2)*tau + &
        		(Adv(:,1)*sp(1,1) + Adv(:,2)*sp(1,2) + Adv(:,3)*sp(1,3))*AR + 3*(Nx(1)*Ux + Ny(1)*Uy)*choq(1)
         rhs_tmp(:,2) = (Nx(2)*AA1 + Ny(2)*AA2)*tau + &
             (Adv(:,1)*sp(2,1) + Adv(:,2)*sp(2,2) + Adv(:,3)*sp(2,3))*AR + 3*(Nx(2)*Ux + Ny(2)*Uy)*choq(2)
         rhs_tmp(:,3) = (Nx(3)*AA1 + Ny(3)*AA2)*tau + &
             (Adv(:,1)*sp(3,1) + Adv(:,2)*sp(3,2) + Adv(:,3)*sp(3,3))*AR + 3*(Nx(3)*Ux + Ny(3)*Uy)*choq(3)
 
+		do i=1,3
 		!$OMP ATOMIC
-        rhs(1,ipoin(1)) = rhs(1,ipoin(1)) + rhs_tmp(1,1)
+        rhs(1,ipoin(i)) = rhs(1,ipoin(i)) + rhs_tmp(1,i)
 		!$OMP ATOMIC
-        rhs(2,ipoin(1)) = rhs(2,ipoin(1)) + rhs_tmp(2,1)
+        rhs(2,ipoin(i)) = rhs(2,ipoin(i)) + rhs_tmp(2,i)
 		!$OMP ATOMIC
-        rhs(3,ipoin(1)) = rhs(3,ipoin(1)) + rhs_tmp(3,1)
+        rhs(3,ipoin(i)) = rhs(3,ipoin(i)) + rhs_tmp(3,i)
 		!$OMP ATOMIC
-        rhs(4,ipoin(1)) = rhs(4,ipoin(1)) + rhs_tmp(4,1)
+        rhs(4,ipoin(i)) = rhs(4,ipoin(i)) + rhs_tmp(4,i)
+		end do
 
-		!$OMP ATOMIC
-        rhs(1,ipoin(2)) = rhs(1,ipoin(2)) + rhs_tmp(1,2)
-		!$OMP ATOMIC
-        rhs(2,ipoin(2)) = rhs(2,ipoin(2)) + rhs_tmp(2,2)
-		!$OMP ATOMIC
-        rhs(3,ipoin(2)) = rhs(3,ipoin(2)) + rhs_tmp(3,2)
-		!$OMP ATOMIC
-        rhs(4,ipoin(2)) = rhs(4,ipoin(2)) + rhs_tmp(4,2)
-
-		!$OMP ATOMIC
-        rhs(1,ipoin(3)) = rhs(1,ipoin(3)) + rhs_tmp(1,3)
-		!$OMP ATOMIC
-        rhs(2,ipoin(3)) = rhs(2,ipoin(3)) + rhs_tmp(2,3)
-		!$OMP ATOMIC
-        rhs(3,ipoin(3)) = rhs(3,ipoin(3)) + rhs_tmp(3,3)
-		!$OMP ATOMIC
-        rhs(4,ipoin(3)) = rhs(4,ipoin(3)) + rhs_tmp(4,3)
     ENDDO
     !$OMP END DO
     !$OMP END PARALLEL
