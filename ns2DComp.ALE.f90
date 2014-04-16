@@ -3,94 +3,6 @@
 !CCC                   NAVIER-STOKES 2D                    CCC     
 !CCC                                                       CCC
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-MODULE DATOS_REFINAMIENTO
-    REAL(8)ETA_REFIN,HHMAX_REFIN,HHMIN_REFIN
-END MODULE DATOS_REFINAMIENTO
-
-MODULE DATOS_ENTRADA
-    INTEGER NGAS
-    REAL(8) GAMA,UINF,VINF,TINF,RHOINF,MACHINF,PINF,CINF
-    REAL(8) FR,FMU,FGX,FGY,QH,FK,FCv
-END MODULE DATOS_ENTRADA
-
-MODULE MNORMALES
-    INTEGER   NNORMV
-    INTEGER , DIMENSION(:,:), ALLOCATABLE:: IVN
-    INTEGER , DIMENSION(:), ALLOCATABLE:: INORMV_NODE
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: RNORMV_VALUEX,RNORMV_VALUEY,RNX,RNY,BAUX
-END MODULE MNORMALES
-
-MODULE MALLOCAR
-    INTEGER NNOD,NELEM,NFIXRHO,NFIXVI,NFIXV,NELNORM,NFIXT,NSETS,NMASTER
-    INTEGER NSLAVE,NFIX_MOVE,NMOVE
-END MODULE MALLOCAR
-
-MODULE MVELOCIDADES
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: VEL_X,VEL_Y,W_X,W_Y
-END MODULE MVELOCIDADES
-
-MODULE MVARIABGEN
-    REAL(8) , DIMENSION(:,:), ALLOCATABLE:: U,U1,U2,RHS,RHS1,RHS2,RHS3,UN
-END MODULE MVARIABGEN
-
-MODULE MVARIABFIX
-    INTEGER , DIMENSION(:), ALLOCATABLE:: IFIXRHO_NODE,IFIXV_NODE,IFIXT_NODE
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: RFIXRHO_VALUE,RFIXV_VALUEX
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: RFIXV_VALUEY,RFIXT_VALUE
-END MODULE MVARIABFIX
-
-MODULE MGEOMETRIA
-    INTEGER , DIMENSION(:,:), ALLOCATABLE:: N
-    REAL(8) , DIMENSION(:,:), ALLOCATABLE:: DNX,DNY
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: X,Y,HHX,HHY,AREA,HH,M
-END MODULE MGEOMETRIA
-
-MODULE MVARIABLES
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: P,T,RHO,E,RMACH
-END MODULE MVARIABLES
-
-MODULE MLAPLACE
-    INTEGER , DIMENSION(:,:), ALLOCATABLE:: INDEL
-    INTEGER , DIMENSION(:), ALLOCATABLE:: IND,NN1,NN2
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: ADIAG,RAUX,S
-END MODULE MLAPLACE
-
-MODULE MFUERZAS
-    INTEGER , DIMENSION(:,:,:), ALLOCATABLE:: ISET
-    INTEGER , DIMENSION(:), ALLOCATABLE:: IPER_MASTER,IPER_SLAVE,IPER_AUX
-END MODULE MFUERZAS
-
-MODULE MMOVIMIENTO
-    INTEGER , DIMENSION(:), ALLOCATABLE:: IFM,I_M,ILAUX
-END MODULE MMOVIMIENTO
-
-MODULE MESTABILIZACION
-    REAL(8) CTE
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: SHOC,T_SUGN1,T_SUGN2,T_SUGN3
-END MODULE MESTABILIZACION
-
-MODULE MPRINTRES
-    CHARACTER*4 RHOCHAR,VEL2CHAR,MACHCHAR,PRESCHAR,TEMPCHAR,ENERCHAR,POSCHAR
-END MODULE MPRINTRES
-
-MODULE MNEWMARK
-    REAL(8) , DIMENSION(:), ALLOCATABLE:: DXPOS,DYPOS
-END MODULE MNEWMARK
-
-MODULE MATRICES
-    INTEGER NDIM
-    REAL(8), DIMENSION(:,:), ALLOCATABLE:: MASA,C,K
-END MODULE MATRICES
-
-MODULE MAT2
-    REAL(8), DIMENSION(:), ALLOCATABLE:: DISN,DISS,VELN,VELS,ACCN,ACCS,R,G,G1,F,CTEN
-END MODULE MAT2
-
-MODULE TIMERS
-    integer rate, start_t, end_t
-    real todo_t, cuarto_t, output_t, masas_t, deriv_t, laplace_t, normales_t, forces_t, newmark_t, grad_t, transf_t, estab_t
-END MODULE TIMERS
-
 PROGRAM NSComp2D
     USE DATOS_REFINAMIENTO
     USE DATOS_ENTRADA
@@ -110,6 +22,9 @@ PROGRAM NSComp2D
     USE MATRICES
     USE MAT2
     USE TIMERS
+	use MelementSurrPoint
+	use MpointSurrPoint
+	use MsparseLaplace
     IMPLICIT REAL(8) (A-H,O-Z)
   
     INTEGER IELEM_SETS(10),BANDERA,NESTAB
@@ -125,7 +40,7 @@ PROGRAM NSComp2D
     ! CCCC LOCAL TIME STEP
     REAL(8) , DIMENSION(:), ALLOCATABLE:: DTL,DT
     ! CCCC NODOS VECINOS Y LAPLACIANO
-    REAL(8) , DIMENSION(:), ALLOCATABLE::B,RES
+    REAL(8) , DIMENSION(:), ALLOCATABLE:: B,RES
     REAL(8) , DIMENSION(:), ALLOCATABLE:: XPOS,YPOS,PK,APK,Z,POS_AUX
     ! CCCC REFINAMIENTO
     REAL(8) , DIMENSION(:), ALLOCATABLE:: HH_NEW
@@ -137,7 +52,7 @@ PROGRAM NSComp2D
     CHARACTER FILE*80, XCHAR
 
 	cuarto_t=0; todo_t = 0; output_t=0; masas_t=0; deriv_t=0; laplace_t=0; normales_t=0
-	forces_t=0; newmark_t=0; grad_t=0; transf_t=0
+	forces_t=0; newmark_t=0; grad_t=0; transf_t=0; laplace2_t=0; grad2_t=0; residuo_t=0; spmv_t=0
 
     !CCCC----> TIEMPO DE CPU
     HITE=ETIME(ZZ)
@@ -428,8 +343,14 @@ PROGRAM NSComp2D
 
     !CCCC----> CALCULO DE LOS NODOS VECINOS Y EL LAPLACIANO
     !CCCC  ------------------------------------------------------
-    CALL LAPLACE(N,AREA,DNX,DNY,IAUX,NPOS)
- 
+	call elementSurrPoint(N, nelem, nnod)
+	call pointSurrPoint(N, nelem, nnod)
+	call initLapSparse(nnod)
+	call laplace2(N, area, dNx, dNy, nelem, nnod)
+	call allocBiCG(nnod)
+	npos = size(lap_sparse)
+	!CALL LAPLACE(N,AREA,DNX,DNY,IAUX,NPOS)
+
     !!$ ! FIJO QUE NODOS SE MUEVEN Y CUALES NO..
     NNMOVE=NFIX_MOVE+NMOVE
     KK=0
@@ -531,10 +452,21 @@ PROGRAM NSComp2D
 
             !CCCC----> CALCULO DE LOS NODOS VECINOS Y EL LAPLACIANO
             !CCCC  ------------------------------------------------------
+			!call system_clock(start_t,rate)
+            !CALL LAPLACE(N,AREA,DNX,DNY,IAUX,NPOS)
+			!call system_clock(end_t)
+			!laplace_t = laplace_t + real(end_t-start_t)/real(rate)
+
 			call system_clock(start_t,rate)
-            CALL LAPLACE(N,AREA,DNX,DNY,IAUX,NPOS)
+			call laplace2(N, area, dNx, dNy, nelem, nnod)
 			call system_clock(end_t)
-			laplace_t = laplace_t + real(end_t-start_t)/real(rate)
+			laplace2_t = laplace2_t + real(end_t-start_t)/real(rate)
+			
+			!if(mod(iter,100)==0) then
+			!print *, sum(S, size(lap_sparse))
+			!print *, sum(lap_sparse)
+			!call sleep(2)
+			!end if
 
         END IF
 
@@ -607,8 +539,9 @@ PROGRAM NSComp2D
 		newmark_t= newmark_t+ real(end_t-start_t)/real(rate)
      
         ALPHA=DISN(2)-ALPHAV; YPOSR=DISN(1) -YPOSRV
-        OPEN(17,FILE='DESPLAZAMIENTO',STATUS='UNKNOWN')
-        WRITE(17,*)ITER,DISN(1),DISN(2)
+        !OPEN(17,FILE='DESPLAZAMIENTO',STATUS='UNKNOWN')
+        !WRITE(17,*)ITER,DISN(1),DISN(2)
+
 		call system_clock(start_t,rate)
         CALL TRANSF(ALPHA,YPOSR,XREF,YREF)
 		call system_clock(end_t)
@@ -620,11 +553,23 @@ PROGRAM NSComp2D
       
         B=0.D0
 		call system_clock(start_t,rate)
-        CALL GRADCONJ2(S,XPOS,B,NN1,NN2,NNOD,NPOS &
-            ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
-            ,PK,APK,Z)
+		call biconjGrad(lap_sparse, lap_idx, lap_rowptr, lap_diag, xpos, b, pos_aux(1:nnmove), ilaux(1:nnmove),&
+				npos, nnod, nnmove)
 		call system_clock(end_t)
-		grad_t= grad_t+ real(end_t-start_t)/real(rate)
+		grad2_t = grad2_t+ real(end_t-start_t)/real(rate)
+
+		!call system_clock(start_t,rate)
+        !CALL GRADCONJ2(S,xpos,B,NN1,NN2,NNOD,NPOS &
+        !    ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
+        !    ,PK,APK,Z)
+		!call system_clock(end_t)
+		!grad_t= grad_t+ real(end_t-start_t)/real(rate)
+		
+		!print *, "GRAD1---------------------------"
+		!print *, sum(xpos)
+		!print *, "GRAD2---------------------------"
+		!print *, sum(dummy)
+		!call sleep(1)
              
         X=X+XPOS
         W_X=XPOS/DTMIN
@@ -633,11 +578,23 @@ PROGRAM NSComp2D
      
         B=0.D0
 		call system_clock(start_t,rate)
-        CALL GRADCONJ2(S,YPOS,B,NN1,NN2,NNOD,NPOS &
-            ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
-            ,PK,APK,Z)
+		call biconjGrad(lap_sparse, lap_idx, lap_rowptr, lap_diag, ypos, b, pos_aux(1:nnmove), ilaux(1:nnmove),&
+				npos, nnod, nnmove)
 		call system_clock(end_t)
-		grad_t= grad_t+ real(end_t-start_t)/real(rate)
+		grad2_t= grad2_t+ real(end_t-start_t)/real(rate)
+
+		!call system_clock(start_t,rate)
+        !CALL GRADCONJ2(S,ypos,B,NN1,NN2,NNOD,NPOS &
+        !    ,ILAUX,POS_AUX,NNMOVE,RAUX,ADIAG &
+        !    ,PK,APK,Z)
+		!call system_clock(end_t)
+		!grad_t= grad_t+ real(end_t-start_t)/real(rate)
+
+		!print *, "GRAD1---------------------------"
+		!print *, sum(ypos)
+		!print *, "GRAD2---------------------------"
+		!print *, sum(dummy)
+		!call sleep(1)
 	
         Y=Y+YPOS
         W_Y=YPOS/DTMIN
@@ -726,11 +683,15 @@ PROGRAM NSComp2D
 	print *, "masas_t: ", masas_t
 	print *, "deriv_t: ", deriv_t
 	print *, "normales_t: ", normales_t
-	print *, "laplace_t: ", laplace_t
+	!print *, "laplace_t: ", laplace_t
+	print *, "laplace2_t: ", laplace2_t
 	print *, "forces_t: ", forces_t
 	print *, "newmark_t: ", newmark_t
 	print *, "transf_t: ", transf_t
-	print *, "grad_t: ", grad_t
+	!print *, "grad_t: ", grad_t
+	print *, "grad2_t: ", grad2_t
+	print *, "spmv_t: ", spmv_t
+	!print *, "residuo_t: ", residuo_t
 
     !!$  !CALL NEW_SIZE(NNOD,NELEM,N,DNX,DNY,AREA,M,HH,U &
     !!$  !     ,HH_NEW)
@@ -1102,7 +1063,7 @@ SUBROUTINE CUARTO_ORDEN(U,U_n,GAMM,FR)
 
     !$OMP PARALLEL &
     !$OMP PRIVATE(ielem,ipoin,gama,TEMP,FMU,Nx,Ny,Ux,Uy,AR,&
-    !$OMP U_loc,PHI_LOC,vx,vy,V_sq,e,C,A1,A2,Adv,U_n_tmp,i)
+    !$OMP U_loc,vx,vy,V_sq,e,c,A1,A2,Adv,U_n_tmp,i)
 
     !$OMP DO
     DO ielem=1,nelem
@@ -1134,23 +1095,36 @@ SUBROUTINE CUARTO_ORDEN(U,U_n,GAMM,FR)
 
 		!===GAUSS QUAD===
 		do i=1,3
-        !A1(:,1,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vx(i)*vx(i)  , (3.D0-gama)*vx(i)                ,&
-				-(gama-1.D0)*vy(i)        , (gama-1.D0)         /)
-        A1(2,:,1) = (/ -vx(i)*vy(i) 			  , vy(i)                , vx(i)	          , 0.D0             /)
-        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vx(i), &
-				gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vx(i)*vx(i), &
-				-(gama-1.D0)*vx(i)*vy(i), gama*vx(i) /)
-        !A2(:,1,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,1) = (/ -vx(i)*vy(i)               , vy(i)                  , vx(i)         , 0.D0 	           /)
-        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vy(i)*vy(i)  , -(gama-1.D0)*vx(i)                        ,&
-				(3.D0-gama)*vy(i), (gama-1.D0)              /)
-        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vy(i), -(gama-1.D0)*vx(i)*vy(i),&
-				gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vy(i)*vy(i),gama*vy(i) /)
+        !A1(0,:,i) = (/ 0.D0, 1.D0, 0.D0, 0.D0 /)
+        A1(1,:,i) = (/ (gama-1.D0)/2.D0*V_sq(i)-vx(i)*vx(i),&
+					(3.D0-gama)*vx(i),&
+					-(gama-1.D0)*vy(i),&
+					(gama-1.D0) /)
+        A1(2,:,i) = (/ -vx(i)*vy(i),&
+					vy(i),&
+					vx(i),&
+					0.D0 /)
+        A1(3,:,i) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vx(i),&
+					gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vx(i)*vx(i),&
+					-(gama-1.D0)*vx(i)*vy(i),&
+					gama*vx(i) /)
+        !A2(0,:,i) = (/ 0.D0, 0.D0, 1.D0, 0.D0 /)
+        A2(1,:,i) = (/ -vx(i)*vy(i),&
+					vy(i),&
+					vx(i),&
+					0.D0 /)
+        A2(2,:,i) = (/ (gama-1.D0)/2.D0*V_sq(i)-vy(i)*vy(i),&
+					-(gama-1.D0)*vx(i),&
+					(3.D0-gama)*vy(i),&
+					(gama-1.D0) /)
+        A2(3,:,i) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vy(i),&
+					-(gama-1.D0)*vx(i)*vy(i),&
+					gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vy(i)*vy(i),&
+					gama*vy(i) /)
 
-        Adv(1,i)=                  Ux(2)                                       +                    Uy(3)
-        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4) + A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2)&
-            + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
+        Adv(1,i) = Ux(2) + Uy(3)
+        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4)&
+					+A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2) + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
 		end do
 		!===END GAUSS QUAD===
 
@@ -1318,7 +1292,7 @@ SUBROUTINE calcRHS(DTL,U,U_n,rhs,P,GAMM,FR,RMU,FK,FCV,TINF)
     sp(:,3) = (/ .5D0, 0.D0, .5D0 /)
 
     !$OMP PARALLEL &
-    !$OMP PRIVATE(ielem,ipoin,gama,temp,FMU,Nx,Ny,Ux,Uy,AR,HLONG,HLONGX,HLONGY,tau,ALFA_MU,I,&
+    !$OMP PRIVATE(ielem,ipoin,gama,temp,FMU,Nx,Ny,Ux,Uy,AR,HLONG,HLONGX,HLONGY,tau,ALFA_MU,i,&
     !$OMP U_loc,phi_loc,vx,vy,V_sq,e,C,A1,A2,Adv,AA1,AA2,Adv_phi,choq,rhs_tmp)
 
     !$OMP DO
@@ -1370,22 +1344,36 @@ SUBROUTINE calcRHS(DTL,U,U_n,rhs,P,GAMM,FR,RMU,FK,FCV,TINF)
 
 		!===GAUSS QUAD===
 		do i=1,3 
-        !A1(0,:,1) = (/ 0.D0				  , 1.D0				          , 0.D0		  , 0.D0                       /)
-        A1(1,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vx(i)*vx(i)  , (3.D0-gama)*vx(i)      , -(gama-1.D0)*vy(i)        ,&
-				(gama-1.D0)         /)
-        A1(2,:,1) = (/ -vx(i)*vy(i) 			  , vy(i) 			             , vx(i)	          , 0.D0            /)
-        A1(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vx(i),gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vx(i)*vx(i),&
-				-(gama-1.D0)*vx(i)*vy(i), gama*vx(i) /)
-        !A2(0,:,1) = (/ 0.D0				  , 0.D0						  , 1.D0	      , 0.D0                       /)
-        A2(1,:,1) = (/ -vx(i)*vy(i)               , vy(i)                        , vx(i)         , 0.D0          /)
-        A2(2,:,1) = (/ (gama-1.D0)/2.D0*V_sq(i)-vy(i)*vy(i)  , -(gama-1.D0)*vx(i)              , (3.D0-gama)*vy(i),&
-				(gama-1.D0)              /)
-        A2(3,:,1) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vy(i), -(gama-1.D0)*vx(i)*vy(i),&
-				gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vy(i)*vy(i),gama*vy(i) /)
+        !A1(0,:,i) = (/ 0.D0, 1.D0, 0.D0, 0.D0 /)
+        A1(1,:,i) = (/ (gama-1.D0)/2.D0*V_sq(i)-vx(i)*vx(i),&
+					(3.D0-gama)*vx(i),&
+					-(gama-1.D0)*vy(i),&
+					(gama-1.D0) /)
+        A1(2,:,i) = (/ -vx(i)*vy(i),&
+					vy(i),&
+					vx(i),&
+					0.D0 /)
+        A1(3,:,i) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vx(i),&
+					gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vx(i)*vx(i),&
+					-(gama-1.D0)*vx(i)*vy(i),&
+					gama*vx(i) /)
+        !A2(0,:,i) = (/ 0.D0, 0.D0, 1.D0, 0.D0 /)
+        A2(1,:,i) = (/ -vx(i)*vy(i),&
+					vy(i),&
+					vx(i),&
+					0.D0 /)
+        A2(2,:,i) = (/ (gama-1.D0)/2.D0*V_sq(i)-vy(i)*vy(i),&
+					-(gama-1.D0)*vx(i),&
+					(3.D0-gama)*vy(i),&
+					(gama-1.D0) /)
+        A2(3,:,i) = (/ ((gama-1.D0)*V_sq(i)-gama*e(i))*vy(i),&
+					-(gama-1.D0)*vx(i)*vy(i),&
+					gama*e(i)-(gama-1.D0)/2.D0*V_sq(i)-(gama-1.D0)*vy(i)*vy(i),&
+					gama*vy(i) /)
 
-        Adv(1,i)=                  Ux(2)                                       +                    Uy(3)
-        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4) + A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2)&
-            + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
+        Adv(1,i) = Ux(2) + Uy(3)
+        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4)&
+					+A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2) + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
 		end do 
 		!===END GAUSS QUAD===
 
@@ -2059,7 +2047,7 @@ SUBROUTINE FUENTE(dtl)
     sp(:,3) = (/ .5D0, 0.D0, .5D0 /)
   
     !$OMP PARALLEL &
-    !$OMP PRIVATE(ielem,Ux,Uy,AR,wx,Wy,rhs_tmp,ipoin)
+    !$OMP PRIVATE(ielem,Ux,Uy,AR,wx,Wy,rhs_tmp,ipoin,i)
 
     !$OMP DO
     DO ielem=1,nelem
@@ -2085,32 +2073,16 @@ SUBROUTINE FUENTE(dtl)
         rhs_tmp(:,2)=-AR*(sp(2,1)*(Ux*wx(1) + Uy*wy(1)) + sp(2,2)*(Ux*wx(2) + Uy*wy(2)) + sp(2,3)*(Ux*wx(3) + Uy*wy(3)))
         rhs_tmp(:,3)=-AR*(sp(3,1)*(Ux*wx(1) + Uy*wy(1)) + sp(3,2)*(Ux*wx(2) + Uy*wy(2)) + sp(3,3)*(Ux*wx(3) + Uy*wy(3)))
 
+		do i=1,3
 		!$OMP ATOMIC
-        rhs(1,ipoin(1)) = rhs(1,ipoin(1)) + rhs_tmp(1,1)
+        rhs(1,ipoin(i)) = rhs(1,ipoin(i)) + rhs_tmp(1,i)
 		!$OMP ATOMIC
-        rhs(2,ipoin(1)) = rhs(2,ipoin(1)) + rhs_tmp(2,1)
+        rhs(2,ipoin(i)) = rhs(2,ipoin(i)) + rhs_tmp(2,i)
 		!$OMP ATOMIC
-        rhs(3,ipoin(1)) = rhs(3,ipoin(1)) + rhs_tmp(3,1)
+        rhs(3,ipoin(i)) = rhs(3,ipoin(i)) + rhs_tmp(3,i)
 		!$OMP ATOMIC
-        rhs(4,ipoin(1)) = rhs(4,ipoin(1)) + rhs_tmp(4,1)
-
-		!$OMP ATOMIC
-        rhs(1,ipoin(2)) = rhs(1,ipoin(2)) + rhs_tmp(1,2)
-		!$OMP ATOMIC
-        rhs(2,ipoin(2)) = rhs(2,ipoin(2)) + rhs_tmp(2,2)
-		!$OMP ATOMIC
-        rhs(3,ipoin(2)) = rhs(3,ipoin(2)) + rhs_tmp(3,2)
-		!$OMP ATOMIC
-        rhs(4,ipoin(2)) = rhs(4,ipoin(2)) + rhs_tmp(4,2)
-
-		!$OMP ATOMIC
-        rhs(1,ipoin(3)) = rhs(1,ipoin(3)) + rhs_tmp(1,3)
-		!$OMP ATOMIC
-        rhs(2,ipoin(3)) = rhs(2,ipoin(3)) + rhs_tmp(2,3)
-		!$OMP ATOMIC
-        rhs(3,ipoin(3)) = rhs(3,ipoin(3)) + rhs_tmp(3,3)
-		!$OMP ATOMIC
-        rhs(4,ipoin(3)) = rhs(4,ipoin(3)) + rhs_tmp(4,3)
+        rhs(4,ipoin(i)) = rhs(4,ipoin(i)) + rhs_tmp(4,i)
+		end do
 
     END DO
     !$OMP END DO
@@ -2145,6 +2117,26 @@ FUNCTION LONG_FILE(FILE)
       
 END
 
+!=====ELEMENTOS VECINOS=====
+subroutine surroundingElements(N)
+    USE MALLOCAR
+    USE MLAPLACE
+    IMPLICIT REAL(8) (A-H,O-Z)
+    INTEGER N(3,NELEM)
+	integer ipoin(3)
+   
+    IND=0
+    DO IELEM=1,NELEM
+        ipoin=N(:,IELEM)
+        IND(ipoin(1))=IND(ipoin(1))+1
+        IND(ipoin(2))=IND(ipoin(2))+1
+        IND(ipoin(3))=IND(ipoin(3))+1
+        INDEL(IND(ipoin(1)),ipoin(1))=IELEM
+        INDEL(IND(ipoin(2)),ipoin(2))=IELEM
+        INDEL(IND(ipoin(3)),ipoin(3))=IELEM
+    END DO
+end subroutine
+
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 !CCCC----------------------------------------------------CCCC
 !CCCC CALCULA LOS NODOS VECINOS Y ENSAMBLA EL LAPLACIANO CCCC
@@ -2158,25 +2150,13 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
    
     INTEGER N(3,NELEM)
     INTEGER IAUX(50)
-    REAL(8) DNX(3,NELEM),DNY(3,NELEM),AR(NELEM)
-	integer ipoin(3)
+    REAL(8) DNX(3,NELEM),DNY(3,NELEM),AR(NELEM), AREA
    
     IPOS=0
     RAUX=0.D0
-    IND=0
-   
-    DO IELEM=1,NELEM
-        ipoin=N(:,IELEM)
-        IND(ipoin(1))=IND(ipoin(1))+1
-        IND(ipoin(2))=IND(ipoin(2))+1
-        IND(ipoin(3))=IND(ipoin(3))+1
-        INDEL(IND(ipoin(1)),ipoin(1))=IELEM
-        INDEL(IND(ipoin(2)),ipoin(2))=IELEM
-        INDEL(IND(ipoin(3)),ipoin(3))=IELEM
-    END DO
    
     DO INOD=1,NNOD
-		!Build IAUX: neighbour points of INOD
+		!Build IAUX: neighbor points of INOD
         NCON=1
         IAUX(1)=INOD
         DO INDICE=1,IND(INOD)
@@ -2193,6 +2173,7 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
             END DO
         END DO
       
+
         DO INDICE=1,IND(INOD)
             IELEM=INDEL(INDICE,INOD)
             AREA=AR(IELEM)
@@ -2202,7 +2183,7 @@ SUBROUTINE LAPLACE(N,AR,DNX,DNY,IAUX,NPOS)
                 IF (N1.EQ.INOD) THEN
                     DO J=1,3
                         N2=N(J,IELEM)
-                        RAUX(N2)=RAUX(N2)+(DNX(I,IELEM)*DNX(J,IELEM)+DNY(I,IELEM)*DNY(J,IELEM))/AREA**2.
+                        RAUX(N2)=RAUX(N2)+(DNX(I,IELEM)*DNX(J,IELEM)+DNY(I,IELEM)*DNY(J,IELEM))/AREA**2
                     END DO
                 END IF
             END DO
@@ -2437,9 +2418,10 @@ END SUBROUTINE ESTIMADOR_ERR
 SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
     ,IFIXPRES,RFIXP_VALUE,IFIXP,RES,ADIAG &
     ,PK,APK,Z)
+	use TIMERS
     IMPLICIT REAL(8) (A-H,O-Z)
     INTEGER NN1(NPOS),NN2(NPOS),IFIXPRES(IFIXP)
-    REAL(8) RES(NNOD),PRESS(NNOD),S(NPOS)
+    REAL(8) RES(NNOD),PRESS(NNOD),S(NPOS), CONJERR
     REAL(8) B(NNOD),ADIAG(NNOD),RFIXP_VALUE(IFIXP)
     !CCCC ---> AUXILIARES
     REAL(8)PK(NNOD),APK(NNOD),Z(NNOD)
@@ -2448,7 +2430,10 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
 
     PRESS(IFIXPRES(:))=RFIXP_VALUE(:)
   
+	call system_clock(sub_start, sub_rate)
     CALL RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
+	call system_clock(sub_end)
+	residuo_t = residuo_t + real(sub_end - sub_start)/real(sub_rate)
 
     RES=B-RES
  
@@ -2472,7 +2457,10 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
             PK=Z+BET*PK
         END IF
          
+		call system_clock(sub_start, sub_rate)
         CALL RESIDUO2(APK,S,PK,NN1,NN2,NPOS,NNOD,IFIXPRES,IFIXP)
+		call system_clock(sub_end)
+		residuo_t = residuo_t + real(sub_end - sub_start)/real(sub_rate)
         ALF=RR_12/sum(APK*PK)
          
         PRESS=PRESS+ALF*PK 
@@ -2483,7 +2471,6 @@ SUBROUTINE GRADCONJ2(S,PRESS,B,NN1,NN2,NNOD,NPOS &
 
     !WRITE(*,'(A,I5)')'  ITERACIONES DE GC....',K
     !WRITE(*,'(A,D14.6)')'      RESIDUO FINAL....',RR_22
-      
     RETURN
 END SUBROUTINE GRADCONJ2
       
@@ -2494,8 +2481,7 @@ SUBROUTINE RESIDUO2(RES,S,PRESS,NN1,NN2,NPOS,NNOD &
     REAL(8) S(NPOS),RES(NNOD),PRESS(NNOD)
   
     RES=0.D0
-    
-	!$OMP PARALLEL DO
+   	!$OMP PARALLEL DO PRIVATE(INOD)
     DO INOD=1,NPOS
 		!$OMP ATOMIC
         RES(NN1(INOD))=RES(NN1(INOD))+S(INOD)*PRESS(NN2(INOD))
@@ -3334,14 +3320,12 @@ END SUBROUTINE ALLOC1
 !END SUBROUTINE
 
 SUBROUTINE TRANSF(ALPHA,YPOSR,XREF,YREF)
-
     USE MGEOMETRIA
     USE MALLOCAR
     USE MMOVIMIENTO
     USE MNEWMARK
 
     IMPLICIT REAL(8) (A-H,O-Z)
-
 
     DO I=1,NMOVE
 
@@ -3353,3 +3337,19 @@ SUBROUTINE TRANSF(ALPHA,YPOSR,XREF,YREF)
     END DO
 
 END SUBROUTINE
+
+!=====Sparse Matrix-Vector Multiplication=====
+subroutine SpMV(spMtx, spIdx, spRowptr, v, y, npoin, npos)
+	real(8) spMtx(npos), v(npoin), y(npoin), dot
+	integer spIdx(npos), spRowptr(npoin+1)
+
+	!$OMP PARALLEL DO PRIVATE(i, j, dot)
+	do i = 1, npoin
+		dot = 0.d0
+		do j = spRowptr(i)+1, spRowptr(i+1)
+			dot = dot + spMtx(j)*v(spIdx(j))
+		end do
+		y(i) = dot
+	end do
+	!$OMP END PARALLEL DO
+end subroutine
