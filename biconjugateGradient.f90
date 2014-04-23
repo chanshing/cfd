@@ -1,64 +1,103 @@
 module MbiconjGrad
-	real(8), allocatable, dimension(:) :: y_BiCG, p_BiCG, r_BiCG, z_BiCG
-end module
-
+	real(8), allocatable, dimension(:), private :: y, p, r, z
+contains !allocBiCG & biconjGrad
 subroutine allocBiCG(npoin)
-	use MbiconjGrad
-	allocate(y_BiCG(npoin), p_BiCG(npoin), r_BiCG(npoin), z_BiCG(npoin))
-end subroutine
+	integer npoin
+	allocate(y(npoin), p(npoin), r(npoin), z(npoin))
+end subroutine allocBiCG
 
 subroutine biconjGrad(spMtx, spIdx, spRowptr, diagMtx, x, b, x_fix, x_fixIdx, nMtxSize, npoin, nfix)
 !-------------------------------------------------------------------------------------------------------------
 !						 Calcula x dado A.x = b, mediante gradiente biconjugado
 !-------------------------------------------------------------------------------------------------------------
 	use TIMERS
-	use MbiconjGrad
+	implicit none
+	integer nMtxSize, npoin, nfix, k
 	integer spIdx(nMtxSize), spRowptr(npoin+1)
 	integer x_fixIdx(nfix)
 	real(8) spMtx(nMtxSize), x(npoin), b(npoin), diagMtx(npoin)
 	real(8)	x_fix(nfix)
-	real(8) tol, err_old, err_new, alfa, beta
+	real(8) tol, err_old, err_new, alfa, beta, dot
 
 	k = 0
 	tol = 1.d-10
 	
 	x(x_fixIdx(:)) = x_fix(:)
-	call system_clock(sub_start, sub_rate)
-	call SpMV(spMtx, spIdx, spRowptr, x, y_BiCG, npoin, nMtxSize)
-	y_BiCG(x_fixIdx(:)) = x(x_fixIdx(:))*1.d30
-	call system_clock(sub_end)
-	spmv_t = spmv_t + real(sub_end - sub_start)/real(sub_rate)
-	r_BiCG = b - y_BiCG
-	r_BiCG(x_fixIdx(:)) = 0.d0
+	call SpMV(spMtx, spIdx, spRowptr, x, y, npoin, nMtxSize)
+	y(x_fixIdx(:)) = x(x_fixIdx(:))*1.d30
+	call sumArray(b, y, r, -1.d0, npoin) 
+	r(x_fixIdx(:)) = 0.d0
 
-	if(sum(r_BiCG*r_BiCG) < tol) return
+	if(sum(r*r) < tol) return
 
-	p_BiCG = r_BiCG/diagMtx
-	err_new = sum(r_BiCG*p_BiCG)
-	call system_clock(sub_start, sub_rate)
-	call SpMV(spMtx, spIdx, spRowptr, p_BiCG, y_BiCG, npoin, nMtxSize)
-	y_BiCG(x_fixIdx(:)) = p_BiCG(x_fixIdx(:))*1.d30
-	call system_clock(sub_end)
-	spmv_t = spmv_t + real(sub_end - sub_start)/real(sub_rate)
-	alfa = err_new/sum(p_BiCG*y_BiCG)
-	x = x + alfa*p_BiCG
+	call divArray(r, diagMtx, p, npoin)
+	call dotProduct(r, p, err_new, npoin)
+	call SpMV(spMtx, spIdx, spRowptr, p, y, npoin, nMtxSize)
+	y(x_fixIdx(:)) = p(x_fixIdx(:))*1.d30
+	call dotProduct(p, y, dot, npoin)
+	alfa = err_new/dot
+	call sumArray(x, p, x, alfa, npoin) 
 	err_old = err_new
 
 	do while(dabs(err_old) > tol .and. k < 1000)
 		k = k + 1
-		r_BiCG = r_BiCG - alfa*y_BiCG
-		z_BiCG = r_BiCG/diagMtx
-		err_new = sum(r_BiCG*z_BiCG)
+		call sumArray(r, y, r, -alfa, npoin) 
+		call divArray(r, diagMtx, z, npoin)
+		call dotProduct(r, z, err_new, npoin)
 		beta = err_new/err_old
-		p_BiCG = z_BiCG + beta*p_BiCG
-		call system_clock(sub_start, sub_rate)
-		call SpMV(spMtx, spIdx, spRowptr, p_BiCG, y_BiCG, npoin, nMtxSize)
-		y_BiCG(x_fixIdx(:)) = p_BiCG(x_fixIdx(:))*1.d30
-		call system_clock(sub_end)
-		spmv_t = spmv_t + real(sub_end - sub_start)/real(sub_rate)
-		alfa = err_new/sum(p_BiCG*y_BiCG)
-		x = x + alfa*p_BiCG
+		call sumArray(z, p, p, beta, npoin) 
+		call SpMV(spMtx, spIdx, spRowptr, p, y, npoin, nMtxSize)
+		y(x_fixIdx(:)) = p(x_fixIdx(:))*1.d30
+		call dotProduct(p, y, dot, npoin)
+		alfa = err_new/dot
+		call sumArray(x, p, x, alfa, npoin) 
 		err_old = err_new
 	end do
+end subroutine biconjGrad
+end module MbiconjGrad
 
-end subroutine
+subroutine divArray(x, y, z, n)
+!---------------------------------
+!		Calcula z = x/y
+!---------------------------------
+	implicit none
+	integer n, i
+	real(8) x(n), y(n), z(n)
+
+	!$OMP PARALLEL DO
+	do i = 1, n
+		z(i) = x(i)/y(i)	
+	end do
+	!$OMP END PARALLEL DO
+end subroutine divArray
+
+subroutine sumArray(x, y, z, alfa, n)
+!-----------------------------------
+!		Calcula z = x + alfa.y
+!-----------------------------------
+	implicit none
+	integer n, i
+	real(8) x(n), y(n), z(n), alfa
+
+	!$OMP PARALLEL DO
+	do i = 1, n
+		z(i) = x(i) + alfa*y(i)
+	end do
+	!$OMP END PARALLEL DO
+end subroutine sumArray
+
+subroutine dotProduct(x, y, res, n)
+!-----------------------------------
+!		Calcula res = <x,y>
+!-----------------------------------
+	implicit none
+	integer n, i
+	real(8) x(n), y(n), res
+	res = 0.d0
+
+	!$OMP PARALLEL DO REDUCTION(+:res)
+	do i = 1, n
+		res = res + x(i)*y(i)
+	end do
+	!$OMP END PARALLEL DO
+end subroutine dotProduct
