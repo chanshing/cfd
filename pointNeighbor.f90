@@ -1,15 +1,11 @@
 module MelementSurrPoint
 	integer, dimension(:), allocatable :: esup1, esup2 
-end module
-
-module MpointSurrPoint
-	integer, dimension(:), allocatable :: psup1, psup2, lpoin
-end module
-
+contains
 subroutine elementSurrPoint(inpoel,nelem,npoin)
-	use MelementSurrPoint 
+	implicit none
 	integer nelem, npoin
 	integer inpoel(3,nelem) 
+	integer ielem, ipoi1, ipoin, istor, i
 	allocate(esup2(npoin+1))
 	esup2=0
 
@@ -43,13 +39,18 @@ subroutine elementSurrPoint(inpoel,nelem,npoin)
 		esup2(ipoin) = esup2(ipoin-1)
 	end do
 	esup2(1) = 0
-end subroutine
+end subroutine elementSurrPoint
+end module MelementSurrPoint
 
+module MpointSurrPoint
+	integer, dimension(:), allocatable :: psup1, psup2, lpoin
+contains
 subroutine pointSurrPoint(inpoel, nelem, npoin)
-	use MpointSurrPoint
 	use MelementSurrPoint
+	implicit none
 	integer nelem, npoin
 	integer inpoel(3,nelem)
+	integer ielem, jpoin, ipoin, istor, iesup, i
 	allocate(psup2(npoin+1))
 	allocate(lpoin(npoin))
 	lpoin = 0; psup2(1) = 0; istor = 0
@@ -88,4 +89,5 @@ subroutine pointSurrPoint(inpoel, nelem, npoin)
 	end do
 
 	deallocate(lpoin)
-end subroutine
+end subroutine pointSurrPoint
+end module MpointSurrPoint
