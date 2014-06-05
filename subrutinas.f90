@@ -1,4 +1,4 @@
-#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
+!#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
 module Mnormales
     integer, private :: m
     integer, dimension(:), allocatable, private :: n_ipoin
@@ -639,8 +639,10 @@ subroutine RK(DTMIN, NRK, BANDERA, GAMM, dtl)
      
         !CCCC  ----> SOLO CALCULO UNA VEZ EL TERMINO DE ESTABILIZACION
         if(IRK.EQ.1)THEN
-        	timer(cuarto_orden(U1,UN,FR,gamm), cuarto_t)
-            timer(estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM), estab_t)
+!        	timer(cuarto_orden(U1,UN,FR,gamm), cuarto_t)
+!            timer(estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM), estab_t)
+        	call cuarto_orden(U1,UN,FR,gamm)
+            call estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM)
         end if
      
 		!$omp parallel do private(ipoin)
@@ -649,10 +651,12 @@ subroutine RK(DTMIN, NRK, BANDERA, GAMM, dtl)
 		end do
 		!$omp end parallel do
     
-        timer(calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm), calcrhs_t)
+!        timer(calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm), calcrhs_t)
+        call calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm)
      
         !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
-        timer(FUENTE(dtl), fuente_t)
+!        timer(FUENTE(dtl), fuente_t)
+        call FUENTE(dtl)
      
         !CCCC ----> INTEGRADOR TEMPORAL
         !$omp parallel do private(ipoin)
@@ -829,8 +833,10 @@ subroutine ADAMSB(DTMIN, NESTAB, GAMM, dtl)
        !CCCC  ----> SOLO CALCULO UNA VEZ EL TERMINO DE ESTABILIZACION
     if (NESTAB.EQ.4) NESTAB = 1
     if (NESTAB.EQ.2) THEN
-        timer(CUARTO_ORDEN(U1,UN,FR,gamm), cuarto_t)
-        timer(ESTAB(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf, GAMM), estab_t)
+!        timer(CUARTO_ORDEN(U1,UN,FR,gamm), cuarto_t)
+!        timer(ESTAB(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf, GAMM), estab_t)
+		call cuarto_orden(U1,UN,FR,gamm)
+		call estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM)
     end if
     NESTAB = NESTAB + 1
         
@@ -840,10 +846,12 @@ subroutine ADAMSB(DTMIN, NESTAB, GAMM, dtl)
 	end do
 	!$omp end parallel do
         
-	timer(calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm), calcrhs_t)
+!	timer(calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm), calcrhs_t)
+	call calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm)
 
     !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
-    timer(FUENTE(dtl), fuente_t)
+!    timer(FUENTE(dtl), fuente_t)
+	call FUENTE(dtl)
        
 	!CCCC ----> INTEGRADOR TEMPORAL
     !$omp parallel do private(ipoin, RL)
