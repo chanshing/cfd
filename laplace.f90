@@ -1,14 +1,20 @@
-module MsparseLaplace
+module Mlaplace
 	integer, dimension(:), allocatable :: lap_idx, lap_rowptr
 	real(8), dimension(:), allocatable :: lap_sparse, lap_diag
-end module
-
-subroutine laplace2(inpoel, area, dNx, dNy, nelem, npoin)
-	use MsparseLaplace
+	private initialize 
+contains 
+subroutine laplace(inpoel, area, dNx, dNy, nelem, npoin)
+!------------------------------------------------------
+!	Ensambla el vector sparse del laplaciano, lap_sparse
+!------------------------------------------------------
 	use MelementSurrPoint
+	implicit none
 	integer nelem, npoin
 	integer inpoel(3,nelem)
     real(8) dNx(3,nelem), dNy(3,nelem), area(nelem), a
+	integer ipoin, iesup, ielem, i, jpoin, j, kpoin, k
+
+	if(.not.allocated(lap_sparse)) call initialize(npoin)
 
 	lap_sparse = 0.d0
 	!$OMP PARALLEL DO PRIVATE(ipoin, iesup, ielem, a, i, jpoin, j, kpoin, k)
@@ -32,20 +38,25 @@ subroutine laplace2(inpoel, area, dNx, dNy, nelem, npoin)
 		lap_diag(ipoin) = lap_sparse(lap_rowptr(ipoin) + 1)
 	end do
 	!$OMP END PARALLEL DO
-end subroutine
+end subroutine laplace
 
-subroutine initLapSparse(npoin)
+subroutine initialize(npoin)
+!----------------------------------------------------------------
+!	Inicializa arreglos necesarios. Arma lap_rowptr & lap_idx
+!----------------------------------------------------------------
 	use MpointSurrPoint
-	use MsparseLaplace
+	implicit none
 	integer npoin
+	integer i, ipoin, i_psup1
+
 	allocate(lap_sparse(size(psup1)+npoin))
 	allocate(lap_idx(size(psup1)+npoin))
 	allocate(lap_rowptr(npoin+1))
 	allocate(lap_diag(npoin))
 
 	lap_sparse = 0.d0
-
 	lap_rowptr(1) = 0
+
 	do i = 2, npoin+1
 		lap_rowptr(i) = psup2(i) + i - 1
 	end do
@@ -58,4 +69,5 @@ subroutine initLapSparse(npoin)
 			i_psup1 = i_psup1 + 1
 		end do
 	end do
-end subroutine
+end subroutine initialize 
+end module Mlaplace
