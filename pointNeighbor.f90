@@ -1,17 +1,14 @@
-module MelementSurrPoint
+module PointNeighbor
 	integer, dimension(:), allocatable :: esup1, esup2 
-end module
-
-module MpointSurrPoint
 	integer, dimension(:), allocatable :: psup1, psup2, lpoin
-end module
-
-subroutine elementSurrPoint(inpoel,nelem,npoin)
-	use MelementSurrPoint 
+contains
+subroutine getEsup(inpoel,nelem,npoin)
+	implicit none
 	integer nelem, npoin
 	integer inpoel(3,nelem) 
+	integer ielem, ipoi1, ipoin, istor, i
 	allocate(esup2(npoin+1))
-	esup2=0
+	esup2 = 0
 
 	!contar la cantidad de elementos vecinos de cada nodo (*histogram pattern*)
 	do ielem=1,nelem
@@ -43,14 +40,17 @@ subroutine elementSurrPoint(inpoel,nelem,npoin)
 		esup2(ipoin) = esup2(ipoin-1)
 	end do
 	esup2(1) = 0
-end subroutine
+end subroutine getEsup
 
-subroutine pointSurrPoint(inpoel, nelem, npoin)
-	use MpointSurrPoint
-	use MelementSurrPoint
+subroutine getPsup(inpoel, nelem, npoin)
+	implicit none
 	integer nelem, npoin
 	integer inpoel(3,nelem)
-	allocate(psup2(npoin+1))
+	integer ielem, jpoin, ipoin, istor, iesup, i
+
+	if(.not.allocated(esup1)) call getEsup(inpoel, nelem, npoin)
+
+	allocate(psup2(npoin + 1))
 	allocate(lpoin(npoin))
 	lpoin = 0; psup2(1) = 0; istor = 0
 
@@ -88,4 +88,5 @@ subroutine pointSurrPoint(inpoel, nelem, npoin)
 	end do
 
 	deallocate(lpoin)
-end subroutine
+end subroutine getPsup
+end module PointNeighbor
