@@ -1,4 +1,4 @@
-!#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
+#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
 module MeshMove
     real(8), dimension(:), allocatable :: b, pos_aux
     real(8), dimension(:), allocatable  :: dxpos, dypos
@@ -49,8 +49,8 @@ subroutine fluidStructure(dtmin)
 	if(.not. allocated(dypos)) allocate(dypos(nmove))
 	if(.not. allocated(b)) allocate(b(npoin))
 
-!        timer(FORCES(NSETS, NSET_NUMB, IELEM_SETS, npoin, X, Y, P, FX, FY, RM, XREF, YREF), forces_t)
-        call FORCES(NSETS, NSET_NUMB, IELEM_SETS, npoin, X, Y, P, FX, FY, RM, XREF, YREF)
+        timer(FORCES(NSETS, NSET_NUMB, IELEM_SETS, npoin, X, Y, P, FX, FY, RM, XREF, YREF), forces_t)
+!        call FORCES(NSETS, NSET_NUMB, IELEM_SETS, npoin, X, Y, P, FX, FY, RM, XREF, YREF)
      
         F(1) = dcos(DISN(2))*FY(1) - dsin(DISN(2))*FX(1)
         F(2) = RM(1) + 0.1d0*dsin(DISN(2))*FX(1) - dcos(DISN(2))*0.1d0*FY(1)
@@ -58,12 +58,14 @@ subroutine fluidStructure(dtmin)
         ALPHAV = DISN(2)
 		YPOSRV = DISN(1)
 
-        call NEWMARK_METHOD(DTMIN)
+!        call NEWMARK_METHOD(DTMIN)
+        timer(NEWMARK_METHOD(DTMIN), newmark_t)
      
         ALPHA = DISN(2) - ALPHAV
 		YPOSR = DISN(1) - YPOSRV
 
-        call TRANSF(ALPHA, YPOSR, XREF, YREF)
+!        call TRANSF(ALPHA, YPOSR, XREF, YREF)
+        timer(TRANSF(ALPHA, YPOSR, XREF, YREF), transf_t)
       
         !NODOS SIN MOVIMIENTO
 		!$omp parallel do private(ipoin)
@@ -84,7 +86,8 @@ subroutine fluidStructure(dtmin)
 		end do
 		!$omp end parallel do
 
-		call biCG(lap_sparse, lap_idx, lap_rowptr, lap_diag, xpos, b, pos_aux(1:nnmove), ilaux(1:nnmove), npoin, nnmove)
+!		call biCG(lap_sparse, lap_idx, lap_rowptr, lap_diag, xpos, b, pos_aux(1:nnmove), ilaux(1:nnmove), npoin, nnmove)
+		timer(biCG(lap_sparse, lap_idx, lap_rowptr, lap_diag, xpos, b, pos_aux(1:nnmove), ilaux(1:nnmove), npoin, nnmove), grad_t)
              
 		!$omp parallel do private(ipoin)
 		do ipoin = 1, npoin
@@ -105,7 +108,8 @@ subroutine fluidStructure(dtmin)
 		end do
 		!$omp end parallel do
 
-		call biCG(lap_sparse, lap_idx, lap_rowptr, lap_diag, ypos, b, pos_aux(1:nnmove), ilaux(1:nnmove), npoin, nnmove)
+!		call biCG(lap_sparse, lap_idx, lap_rowptr, lap_diag, ypos, b, pos_aux(1:nnmove), ilaux(1:nnmove), npoin, nnmove)
+		timer(biCG(lap_sparse, lap_idx, lap_rowptr, lap_diag, ypos, b, pos_aux(1:nnmove), ilaux(1:nnmove), npoin, nnmove), grad_t)
 	
 		!$omp parallel do private(ipoin)
 		do ipoin = 1, npoin

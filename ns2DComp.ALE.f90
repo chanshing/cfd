@@ -1,4 +1,4 @@
-!#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
+#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
 
 !MODULE MVELOCIDADES
 !    REAL(8), DIMENSION(:), ALLOCATABLE:: VEL_X, VEL_Y, W_X, W_Y
@@ -289,23 +289,23 @@ PROGRAM NSComp2D
         if(MOVING.EQ.1)THEN
             !CCCC-----> CALCULO DE LAS NORMALES
             !CCCC---------------------------------------------------------
-!            timer(NORMALES, normales_t)
-            call NORMALES
+            timer(NORMALES, normales_t)
+!            call NORMALES
 
             !CCCC----> CALCULO DE LAS DERIVADAS, EL AREA Y LA LONGITUD CARAC.
             !CCCC------------------------------------------------------------
-!            timer(DERIV(HMIN), deriv_t)
-            call DERIV(HMIN)
+            timer(DERIV(HMIN), deriv_t)
+!            call DERIV(HMIN)
 
             !CCCC----> CALCULO DE LAS MATRICES DE MASAS LUMPED
             !CCCC  ----------------------------------------------------------
-!            timer(MASAS, masas_t)
-            call MASAS
+            timer(MASAS, masas_t)
+!            call MASAS
 
             !CCCC----> CALCULO DE LOS NODOS VECINOS Y EL LAPLACIANO
             !CCCC  ------------------------------------------------------
-!			timer(laplace(inpoel, area, dNx, dNy, nelem, npoin), laplace_t)
-			call laplace(inpoel, area, dNx, dNy, nelem, npoin)
+			timer(laplace(inpoel, area, dNx, dNy, nelem, npoin), laplace_t)
+!			call laplace(inpoel, area, dNx, dNy, nelem, npoin)
         end if
 
 		!$omp parallel do private(ipoin)

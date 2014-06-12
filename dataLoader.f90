@@ -12,9 +12,13 @@ module InputData
 	integer NDIM !<===
     character(4) RHOCHAR, VEL2CHAR, MACHCHAR, PRESCHAR, TEMPCHAR, ENERCHAR, POSCHAR
 	character(80) FILENAME 
+	integer printFlag
 contains
 subroutine readInputData
 	implicit none
+	!PRINTFLAG
+	printFlag = 0
+
     open (1, FILE = 'EULER.DAT', STATUS = 'OLD')
     read (1, '(A)') FILENAME
     CLOSE(1)

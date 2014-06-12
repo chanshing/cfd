@@ -1,4 +1,4 @@
-!#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
+#define timer(func, store) call system_clock(start_t, rate); call func; call system_clock(end_t); store  = store + real(end_t - start_t)/real(rate);
 module Mnormales
     integer, private :: m
     integer, dimension(:), allocatable, private :: n_ipoin
@@ -429,12 +429,13 @@ subroutine ESTAB(U,T,GAMA,FR,RMU &
     return
 end subroutine ESTAB
       
-subroutine calcRHS(U, U_n, rhs, P, FR, RMU, FK, FCV, T_inf, dtl, gamm)
+subroutine calcRHS(U, U_n, rhs, P, RMU, dtl, gamm)
+	!RMU, FK, P, T_inf, FCV al pedos en Euler
     !use MALLOCAR
     !use MGEOMETRIA
 	use MeshData
     use MESTABILIZACION
-	use InputData, only: cte
+	use InputData, only: cte, T_inf, FK, FCv, FR, printFlag
     implicit real(8) (A-H,O-Z)
     real(8) U(4,npoin),P(npoin),U_n(4,npoin),T(npoin), dtl(nelem), gamm(npoin)
     real(8) rhs(4,npoin)
@@ -466,6 +467,10 @@ subroutine calcRHS(U, U_n, rhs, P, FR, RMU, FK, FCV, T_inf, dtl, gamm)
 
         Ux(:) = U(:,ipoin(1))*Nx(1) + U(:,ipoin(2))*Nx(2) + U(:,ipoin(3))*Nx(3)
         Uy(:) = U(:,ipoin(1))*Ny(1) + U(:,ipoin(2))*Ny(2) + U(:,ipoin(3))*Ny(3)
+
+		if(ielem == 1 .and. printFlag /= 1 ) then
+			write(*,'(4E16.8)') Ux(:)
+		end if
 
         AR = area(ielem)*dtl(ielem)/3.d0
         !CCCC  ----> LONG. CARACTERISTICA
@@ -501,36 +506,36 @@ subroutine calcRHS(U, U_n, rhs, P, FR, RMU, FK, FCV, T_inf, dtl, gamm)
 
 		! = = = GAUSS QUAD = ==
 		do i = 1,3 
-        !A1(0,:,i) = (/ 0.d0, 1.d0, 0.d0, 0.d0 /)
-        A1(1,:,i) = (/ (gama-1.d0)/2.d0*V_sq(i)-vx(i)*vx(i),&
-					(3.d0-gama)*vx(i),&
-					-(gama-1.d0)*vy(i),&
-					(gama-1.d0) /)
-        A1(2,:,i) = (/ -vx(i)*vy(i),&
-					vy(i),&
-					vx(i),&
-					0.d0 /)
-        A1(3,:,i) = (/ ((gama-1.d0)*V_sq(i)-gama*e(i))*vx(i),&
-					gama*e(i)-(gama-1.d0)/2.d0*V_sq(i)-(gama-1.d0)*vx(i)*vx(i),&
-					-(gama-1.d0)*vx(i)*vy(i),&
-					gama*vx(i) /)
-        !A2(0,:,i) = (/ 0.d0, 0.d0, 1.d0, 0.d0 /)
-        A2(1,:,i) = (/ -vx(i)*vy(i),&
-					vy(i),&
-					vx(i),&
-					0.d0 /)
-        A2(2,:,i) = (/ (gama-1.d0)/2.d0*V_sq(i)-vy(i)*vy(i),&
-					-(gama-1.d0)*vx(i),&
-					(3.d0-gama)*vy(i),&
-					(gama-1.d0) /)
-        A2(3,:,i) = (/ ((gama-1.d0)*V_sq(i)-gama*e(i))*vy(i),&
-					-(gama-1.d0)*vx(i)*vy(i),&
-					gama*e(i)-(gama-1.d0)/2.d0*V_sq(i)-(gama-1.d0)*vy(i)*vy(i),&
-					gama*vy(i) /)
+			!A1(0,:,i) = (/ 0.d0, 1.d0, 0.d0, 0.d0 /)
+			A1(1,:,i) = (/ (gama-1.d0)/2.d0*V_sq(i)-vx(i)*vx(i),&
+						(3.d0-gama)*vx(i),&
+						-(gama-1.d0)*vy(i),&
+						(gama-1.d0) /)
+			A1(2,:,i) = (/ -vx(i)*vy(i),&
+						vy(i),&
+						vx(i),&
+						0.d0 /)
+			A1(3,:,i) = (/ ((gama-1.d0)*V_sq(i)-gama*e(i))*vx(i),&
+						gama*e(i)-(gama-1.d0)/2.d0*V_sq(i)-(gama-1.d0)*vx(i)*vx(i),&
+						-(gama-1.d0)*vx(i)*vy(i),&
+						gama*vx(i) /)
+			!A2(0,:,i) = (/ 0.d0, 0.d0, 1.d0, 0.d0 /)
+			A2(1,:,i) = (/ -vx(i)*vy(i),&
+						vy(i),&
+						vx(i),&
+						0.d0 /)
+			A2(2,:,i) = (/ (gama-1.d0)/2.d0*V_sq(i)-vy(i)*vy(i),&
+						-(gama-1.d0)*vx(i),&
+						(3.d0-gama)*vy(i),&
+						(gama-1.d0) /)
+			A2(3,:,i) = (/ ((gama-1.d0)*V_sq(i)-gama*e(i))*vy(i),&
+						-(gama-1.d0)*vx(i)*vy(i),&
+						gama*e(i)-(gama-1.d0)/2.d0*V_sq(i)-(gama-1.d0)*vy(i)*vy(i),&
+						gama*vy(i) /)
 
-        Adv(1,i) = Ux(2) + Uy(3)
-        Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4)&
-					+A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2) + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
+			Adv(1,i) = Ux(2) + Uy(3)
+			Adv(2:4,i) = A1(:,1,i)*Ux(1) + A1(:,2,i)*Ux(2) + A1(:,3,i)*Ux(3) + A1(:,4,i)*Ux(4)&
+						+A2(:,1,i)*Uy(1) + A2(:,2,i)*Uy(2) + A2(:,3,i)*Uy(3) + A2(:,4,i)*Uy(4)
 		end do 
 		! = = = end GAUSS QUAD = ==
 
@@ -553,14 +558,14 @@ subroutine calcRHS(U, U_n, rhs, P, FR, RMU, FK, FCV, T_inf, dtl, gamm)
             (Adv(:,1)*sp(3,1) + Adv(:,2)*sp(3,2) + Adv(:,3)*sp(3,3))*AR + 3*(Nx(3)*Ux + Ny(3)*Uy)*choq(3)
 
 		do i = 1,3
-		!$omp atomic
-        rhs(1,ipoin(i)) = rhs(1,ipoin(i)) + rhs_tmp(1,i)
-		!$omp atomic
-        rhs(2,ipoin(i)) = rhs(2,ipoin(i)) + rhs_tmp(2,i)
-		!$omp atomic
-        rhs(3,ipoin(i)) = rhs(3,ipoin(i)) + rhs_tmp(3,i)
-		!$omp atomic
-        rhs(4,ipoin(i)) = rhs(4,ipoin(i)) + rhs_tmp(4,i)
+			!$omp atomic
+			rhs(1,ipoin(i)) = rhs(1,ipoin(i)) + rhs_tmp(1,i)
+			!$omp atomic
+			rhs(2,ipoin(i)) = rhs(2,ipoin(i)) + rhs_tmp(2,i)
+			!$omp atomic
+			rhs(3,ipoin(i)) = rhs(3,ipoin(i)) + rhs_tmp(3,i)
+			!$omp atomic
+			rhs(4,ipoin(i)) = rhs(4,ipoin(i)) + rhs_tmp(4,i)
 		end do
 
     ENDDO
@@ -639,10 +644,10 @@ subroutine RK(DTMIN, NRK, BANDERA, GAMM, dtl)
      
         !CCCC  ----> SOLO CALCULO UNA VEZ EL TERMINO DE ESTABILIZACION
         if(IRK.EQ.1)THEN
-!        	timer(cuarto_orden(U1,UN,FR,gamm), cuarto_t)
-!            timer(estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM), estab_t)
-        	call cuarto_orden(U1,UN,FR,gamm)
-            call estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM)
+        	timer(cuarto_orden(U1,UN,FR,gamm), cuarto_t)
+            timer(estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM), estab_t)
+!        	call cuarto_orden(U1,UN,FR,gamm)
+!           call estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM)
         end if
      
 		!$omp parallel do private(ipoin)
@@ -650,13 +655,78 @@ subroutine RK(DTMIN, NRK, BANDERA, GAMM, dtl)
 			RHS(:, ipoin) = 0.d0
 		end do
 		!$omp end parallel do
-    
-!        timer(calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm), calcrhs_t)
-        call calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm)
+
+		! if(printFlag /= 1) then
+		! 	open(801, file = 'U', status = 'unknown')
+		! 	open(802, file = 'U_n', status = 'unknown')
+		! 	do ipoin = 1, npoin
+		! 		write(801, '(4E26.18)') U(:,ipoin)
+		! 		write(802, '(4E26.18)') UN(:, ipoin)
+		! 	end do
+		! 	close(801)
+		! 	close(802)
+		! 	open(991, file = 'stab', status = 'unknown')
+		! 	open(993, file = 'dtl', status = 'unknown')
+		! 	open(994, file = 'area', status = 'unknown')
+		! 	open(995, file = 'inpoel', status = 'unknown')
+		! 	open(996, file = 'deriv', status = 'unknown')
+		! 	do ielem = 1, nelem
+		! 		write(991, '(4E26.18)') shoc(ielem), T_SUGN1(ielem), T_SUGN2(ielem), T_SUGN3(ielem)
+		! 		write(993, '(E26.18)') dtl(ielem)
+		! 		write(994, '(E26.18)') area(ielem)
+		! 		write(996, '(3E26.18)') dnx(:, ielem)
+		! 		write(996, '(3E26.18)') dny(:, ielem)
+		! 		write(995, '(3I)') inpoel(:, ielem)
+		! 	end do
+		! 	close(991)
+		! 	close(993)
+		! 	close(994)
+		! 	close(995)
+		! 	close(996)
+		! end if
+		do ielem = 1, nelem
+			dnx(1,ielem) = 1
+			dnx(2,ielem) = 2
+			dnx(3,ielem) = 3
+			dny(1,ielem) = 4
+			dny(2,ielem) = 5
+			dny(3,ielem) = 6
+		end do
+		do ipoin = 1, npoin
+			U(1,ipoin) = 2
+			U(2,ipoin) = 4
+			U(3,ipoin) = 6
+			U(4,ipoin) = 8
+		end do
+		do ipoin = 1, npoin
+			UN(1,ipoin) = 1
+			UN(2,ipoin) = 2
+			UN(3,ipoin) = 3
+			UN(4,ipoin) = 4
+		end do
+		shoc = .05d0
+		dtl = .05d0
+		area = .05d0
+        T_SUGN1 = .05d0 
+        T_SUGN2 = .05d0 
+        T_SUGN3 = .05d0 
+				
+        timer(calcRHS(U, UN, RHS, P, RMU, dtl, gamm), calcrhs_t)
+
+		if(printFlag /= 1) then
+			open(992, file = 'rhs', status = 'unknown')
+			do ipoin = 1, npoin
+				write(992, '(4E16.8)') rhs(:, ipoin)
+			end do
+			close(992)
+			print *, "Se imprimio rhs"
+			printFlag = 1
+			call exit(0)
+		end if
      
         !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
-!        timer(FUENTE(dtl), fuente_t)
-        call FUENTE(dtl)
+        timer(FUENTE(dtl), fuente_t)
+!        call FUENTE(dtl)
      
         !CCCC ----> INTEGRADOR TEMPORAL
         !$omp parallel do private(ipoin)
@@ -833,10 +903,10 @@ subroutine ADAMSB(DTMIN, NESTAB, GAMM, dtl)
        !CCCC  ----> SOLO CALCULO UNA VEZ EL TERMINO DE ESTABILIZACION
     if (NESTAB.EQ.4) NESTAB = 1
     if (NESTAB.EQ.2) THEN
-!        timer(CUARTO_ORDEN(U1,UN,FR,gamm), cuarto_t)
-!        timer(ESTAB(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf, GAMM), estab_t)
-		call cuarto_orden(U1,UN,FR,gamm)
-		call estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM)
+        timer(CUARTO_ORDEN(U1,UN,FR,gamm), cuarto_t)
+        timer(ESTAB(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf, GAMM), estab_t)
+!		call cuarto_orden(U1,UN,FR,gamm)
+!		call estab(U,T,GAMA,FR,RMU,DTMIN,RHO_inf,T_inf,U_inf,V_inf,GAMM)
     end if
     NESTAB = NESTAB + 1
         
@@ -846,12 +916,11 @@ subroutine ADAMSB(DTMIN, NESTAB, GAMM, dtl)
 	end do
 	!$omp end parallel do
         
-!	timer(calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm), calcrhs_t)
-	call calcRHS(U,UN,RHS,P,FR,RMU,FK,FCV,T_inf,dtl, gamm)
+	timer(calcRHS(U, UN, RHS, P, RMU, dtl, gamm), calcrhs_t)
 
     !CCCC  ----> CALCULO DE LOS TERMINOS FUENTES
-!    timer(FUENTE(dtl), fuente_t)
-	call FUENTE(dtl)
+    timer(FUENTE(dtl), fuente_t)
+!	call FUENTE(dtl)
        
 	!CCCC ----> INTEGRADOR TEMPORAL
     !$omp parallel do private(ipoin, RL)
