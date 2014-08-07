@@ -8,10 +8,36 @@ module smoothing_mod
 	real*8, parameter :: FACTOR_TOL_DIST = 1d-3
 	real*8, parameter :: FACTOR_DELTA = 1d-2
 	real*8, parameter :: FACTOR_PLUS = 1.d0
-	real*8, parameter :: FACTOR_STEP = 1d-2
+	real*8, parameter :: FACTOR_STEP = 3.d0
 	real*8 :: H_MIN_GLOBAL
-	public :: smoothing
+	public :: smoothing, laplacian_smoothing
 contains
+	subroutine laplacian_smoothing(npoin, nelem, X, Y, inpoel, smoothable, fix)
+		use PointNeighbor, only: psup1, psup2
+		integer, intent(in) :: npoin, nelem, inpoel(3,nelem)
+		real*8, intent(inout) :: X(npoin), Y(npoin)
+		logical, intent(in) :: fix(npoin)
+		logical, intent(inout) :: smoothable(npoin)
+		!%%%%%%%%%%%%%%%
+		integer :: ipoin, ipsup, n
+		real*8 :: X_new, Y_new
+		!%%%%%%%%%%%%%%%
+		call check_smoothable(npoin, nelem, inpoel, X, Y, smoothable)
+		do ipoin = 1, npoin
+		X_new = 0
+		Y_new = 0
+		if(smoothable(ipoin) .and. .not. fix(ipoin)) then
+			n = psup2(ipoin + 1) - psup2(ipoin)
+			do ipsup = psup2(ipoin) + 1, psup2(ipoin + 1)
+			X_new = X_new + X(psup1(ipsup))
+			Y_new = Y_new + Y(psup1(ipsup))
+			end do
+			X(ipoin) = X_new/n
+			Y(ipoin) = Y_new/n
+		end if
+		end do
+	end subroutine
+
 	subroutine smoothing(X, Y, npoin, inpoel, nelem, smoothable, fix)
 		integer, intent(in) :: npoin, nelem, inpoel(3,nelem)
 		real*8, intent(inout) :: X(npoin), Y(npoin)
@@ -167,11 +193,11 @@ contains
 		real*8 :: gx_min, gy_min, mu_min
 		integer :: i
 		!%%%%%%%%%%%%%%%%%%%%
-		get_step = get_h_min(ipoin, npoin, X, Y, nelem, inpoel)*FACTOR_STEP
 		gx_min = gx(min_idx)
 		gy_min = gy(min_idx)
 		mu_min = mu_vec(min_idx)
 		g2 = gx_min**2 + gy_min**2
+		get_step = get_h_min(ipoin, npoin, X, Y, nelem, inpoel)*FACTOR_STEP/dsqrt(g2)
 		do i = 1, size(mu_vec)
 		gg = gx_min*gx(i) + gy_min*gy(i)
 		if(gg < 0) then
