@@ -297,19 +297,21 @@ contains
 		real*8, intent(in) :: X(NPOIN), Y(NPOIN) 
 		logical, intent(out) :: smoothable(NPOIN)
 		!%%%%%%%%%%%%%%%
-		integer :: ielem, jpoin
+		integer :: ielem
 		real*8 :: X_loc(3), Y_loc(3)
 		real*8 :: h1
 		!%%%%%%%%%%%%%%%
 		H_MIN_GLOBAL = 1
-		forall (ielem = 1:NELEM)
-			X_loc(:) = X(inpoel(:,ielem))
-			Y_loc(:) = Y(inpoel(:,ielem))
-			if(mu(X_loc, Y_loc) < TOL_METRIC) then
-				smoothable(inpoel(:,ielem)) = .true.
-			end if
-			h1 = h(X_loc, Y_loc)
-			if(h1 < H_MIN_GLOBAL) H_MIN_GLOBAL = h1
-		end forall
+		! forall (ielem = 1:NELEM)
+		do ielem = 1, NELEM
+		X_loc(:) = X(inpoel(:,ielem))
+		Y_loc(:) = Y(inpoel(:,ielem))
+		if(mu(X_loc, Y_loc) < TOL_METRIC) then
+			smoothable(inpoel(:,ielem)) = .true.
+		end if
+		h1 = h(X_loc, Y_loc)
+		if(h1 < H_MIN_GLOBAL) H_MIN_GLOBAL = h1
+		end do
+		! end forall
 	end subroutine check_smoothable
 end module smoothing_mod
