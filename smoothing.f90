@@ -9,21 +9,21 @@ module smoothing_mod
 	real*8, parameter :: FACTOR_DELTA = 1d-2
 	real*8, parameter :: FACTOR_PLUS = 1.d0
 	real*8, parameter :: FACTOR_STEP = 3.d0
+	!%%%%%%%%%%%%%%%
+	integer :: NELEM, NPOIN
 	real*8 :: H_MIN_GLOBAL
-	public :: smoothing, laplacian_smoothing
+	public :: smoothing 
 contains
-	subroutine laplacian_smoothing(npoin, nelem, X, Y, inpoel, smoothable, fix)
+	subroutine laplacian_smoothing(X, Y, smoothable, fix)
 		use PointNeighbor, only: psup1, psup2
-		integer, intent(in) :: npoin, nelem, inpoel(3,nelem)
-		real*8, intent(inout) :: X(npoin), Y(npoin)
-		logical, intent(in) :: fix(npoin)
-		logical, intent(inout) :: smoothable(npoin)
+		real*8, intent(inout) :: X(NPOIN), Y(NPOIN)
+		logical, intent(inout) :: smoothable(NPOIN)
+		logical, intent(in) :: fix(NPOIN)
 		!%%%%%%%%%%%%%%%
 		integer :: ipoin, ipsup, n
 		real*8 :: X_new, Y_new
 		!%%%%%%%%%%%%%%%
-		call check_smoothable(npoin, nelem, inpoel, X, Y, smoothable)
-		do ipoin = 1, npoin
+		do ipoin = 1, NPOIN
 		X_new = 0
 		Y_new = 0
 		if(smoothable(ipoin) .and. .not. fix(ipoin)) then
@@ -38,11 +38,11 @@ contains
 		end do
 	end subroutine
 
-	subroutine smoothing(X, Y, npoin, inpoel, nelem, smoothable, fix)
-		integer, intent(in) :: npoin, nelem, inpoel(3,nelem)
-		real*8, intent(inout) :: X(npoin), Y(npoin)
-		logical, intent(inout) :: smoothable(npoin)
-		logical, intent(in) :: fix(npoin)
+	subroutine smoothing(X, Y, inpoel, smoothable, fix, npoin0, nelem0)
+		integer, intent(in) :: npoin0, nelem0, inpoel(3,nelem0)
+		real*8, intent(inout) :: X(npoin0), Y(npoin0)
+		logical, intent(inout) :: smoothable(npoin0)
+		logical, intent(in) :: fix(npoin0)
 		!%%%%%%%%%%%%%%%
 		integer :: iter, ipoin, min_idx
 		real*8 :: d_max, TOL_DIST
@@ -54,19 +54,26 @@ contains
 			allocate(mu_vec(MAX_ELEM_PER_NODE), gx(MAX_ELEM_PER_NODE), gy(MAX_ELEM_PER_NODE))
 		end if
 		!%%%%%%%%%%%%%%%
-		call check_smoothable(npoin, nelem, inpoel, X, Y, smoothable)
+		NELEM = nelem0
+		NPOIN = npoin0
+		call check_smoothable(inpoel, X, Y, smoothable)
+		if(.not. any(smoothable == .true.)) return
+		do iter = 1, 2
+		!DEJA ITERAR 2 VECES EL SMOOTHING LAPLACIANO QUE ES MAS BARATO
+		call laplacian_smoothing(X, Y, smoothable, fix)
+		end do
 		TOL_DIST = FACTOR_TOL_DIST*H_MIN_GLOBAL
 		do iter = 1, NITER
 		d_max = 0.d0
-		do ipoin = 1, npoin
+		do ipoin = 1, npoin0
 		if(smoothable(ipoin) .and. .not. fix(ipoin)) then
 			smoothable(ipoin) = .false. 
 			mu_vec = 0.d0
 			gx = 0.d0
 			gy = 0.d0
-			call get_mu_vec(mu_vec, ipoin, npoin, inpoel, nelem, X, Y, min_idx)
+			call get_mu_vec(mu_vec, ipoin, inpoel, X, Y, min_idx)
 			if(mu_vec(min_idx) < TOL_METRIC) then
-				call move_ipoin(X, Y, ipoin, npoin, inpoel, nelem, gx, gy, mu_vec, min_idx, d_max, smoothable)
+				call move_ipoin(X, Y, ipoin, inpoel, gx, gy, mu_vec, min_idx, d_max, smoothable)
 			end if
 		end if
 		end do
@@ -74,18 +81,18 @@ contains
 		end do
 		print*, '=============SMOOTHING============='
 		print*, '# iteraciones:', iter
-		print*, 'Min Distortion Metric:', get_mesh_quality(npoin, nelem, X, Y, inpoel)
+		print*, 'Min Distortion Metric:', get_mesh_quality(X, Y, inpoel)
 		print*, 'H_MIN_GLOBAL:', H_MIN_GLOBAL
 		print*, '==================================='
 	end subroutine smoothing
 
-	subroutine move_ipoin(X, Y, ipoin, npoin, inpoel, nelem, gx, gy, mu_vec, min_idx, d_max, smoothable)
-		integer, intent(in) :: ipoin, npoin, nelem, inpoel(3,nelem)
+	subroutine move_ipoin(X, Y, ipoin, inpoel, gx, gy, mu_vec, min_idx, d_max, smoothable)
+		integer, intent(in) :: ipoin, inpoel(3,NELEM)
 		integer, intent(inout) :: min_idx
 		real*8, intent(inout) :: gx(:), gy(:), mu_vec(:)
-		real*8, intent(inout) :: X(npoin), Y(npoin)
+		real*8, intent(inout) :: X(NPOIN), Y(NPOIN)
 		real*8, intent(inout) :: d_max
-		logical, intent(inout) :: smoothable(npoin)
+		logical, intent(inout) :: smoothable(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%%
 		real*8 :: x_old, y_old, x0, y0, mu_min
 		real*8 :: dx, dy, step, d_move
@@ -98,8 +105,8 @@ contains
 		mu_min = mu_vec(min_idx)
 		x_old = X(ipoin)
 		y_old = Y(ipoin)
-		call get_g(gx, gy, ipoin, npoin, inpoel, nelem, X, Y, mu_vec)
-		step =  get_step(gx, gy, mu_vec, min_idx, ipoin, npoin, X, Y, nelem, inpoel)
+		call get_g(gx, gy, ipoin, inpoel, X, Y, mu_vec)
+		step =  get_step(gx, gy, mu_vec, min_idx, ipoin, X, Y, inpoel)
 		!TRY NEW POSITION
 		accepted = .false.
 		do j = 1, NTRY
@@ -107,7 +114,7 @@ contains
 		dy = step*gy(min_idx)
 		X(ipoin) = X(ipoin) + dx
 		Y(ipoin) = Y(ipoin) + dy
-		call get_mu_vec(mu_vec, ipoin, npoin, inpoel, nelem, X, Y, min_idx_new)
+		call get_mu_vec(mu_vec, ipoin, inpoel, X, Y, min_idx_new)
 		if(mu_vec(min_idx_new) > mu_min*FACTOR_PLUS) then
 			min_idx = min_idx_new
 			accepted = .true.
@@ -130,10 +137,10 @@ contains
 		if(d_move > tiny(1d0)) call update_list(ipoin, smoothable)
 	end subroutine move_ipoin
 
-	subroutine get_mu_vec(mu_vec, ipoin, npoin, inpoel, nelem, X, Y, min_idx)
+	subroutine get_mu_vec(mu_vec, ipoin, inpoel, X, Y, min_idx)
 		use PointNeighbor, only: esup1, esup2
-		integer, intent(in) :: ipoin, npoin, nelem, inpoel(3,nelem)
-		real*8, intent(in) :: X(npoin), Y(npoin)
+		integer, intent(in) :: ipoin, inpoel(3,NELEM)
+		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		real*8, intent(out) :: mu_vec(:)
 		integer, optional, intent(out) :: min_idx
 		!%%%%%%%%%%%%%%%%%%%%
@@ -159,10 +166,10 @@ contains
 		end do
 	end subroutine get_mu_vec
 
-	subroutine get_g(gx, gy, ipoin, npoin, inpoel, nelem, X, Y, mu_vec)
-		integer, intent(in) :: ipoin, npoin, nelem, inpoel(3,nelem)
+	subroutine get_g(gx, gy, ipoin, inpoel, X, Y, mu_vec)
+		integer, intent(in) :: ipoin, inpoel(3,NELEM)
 		real*8, intent(in) :: mu_vec(:)
-		real*8, intent(inout) :: X(npoin), Y(npoin) 
+		real*8, intent(inout) :: X(NPOIN), Y(NPOIN) 
 		real*8, intent(out) :: gx(:), gy(:)
 		!%%%%%%%%%%%%%%%%%%%%
 		real*8 :: x_old, y_old
@@ -172,22 +179,22 @@ contains
 		!--- GX ---
 		x_old = X(ipoin)
 		X(ipoin) = X(ipoin) + DELTA
-		call get_mu_vec(gx, ipoin, npoin, inpoel, nelem, X, Y)
+		call get_mu_vec(gx, ipoin, inpoel, X, Y)
 		gx = (gx - mu_vec)/DELTA
 		X(ipoin) = x_old
 		!--- GY ---
 		y_old = Y(ipoin)
 		Y(ipoin) = Y(ipoin) + DELTA
-		call get_mu_vec(gy, ipoin, npoin, inpoel, nelem, X, Y)
+		call get_mu_vec(gy, ipoin, inpoel, X, Y)
 		gy = (gy - mu_vec)/DELTA
 		Y(ipoin) = y_old
 	end subroutine get_g
 
-	function get_step(gx, gy, mu_vec, min_idx, ipoin, npoin, X, Y, nelem, inpoel)
+	function get_step(gx, gy, mu_vec, min_idx, ipoin, X, Y, inpoel)
 		real*8 :: get_step
 		real*8, intent(in) :: gx(:), gy(:), mu_vec(:)
-		integer, intent(in) :: min_idx, ipoin, npoin, nelem, inpoel(3,nelem)
-		real*8, intent(in) :: X(npoin), Y(npoin)
+		integer, intent(in) :: min_idx, ipoin, inpoel(3,NELEM)
+		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%%
 		real*8 :: g2, gg, step1
 		real*8 :: gx_min, gy_min, mu_min
@@ -197,7 +204,7 @@ contains
 		gy_min = gy(min_idx)
 		mu_min = mu_vec(min_idx)
 		g2 = gx_min**2 + gy_min**2
-		get_step = get_h_min(ipoin, npoin, X, Y, nelem, inpoel)*FACTOR_STEP/dsqrt(g2)
+		get_step = get_h_min(ipoin, X, Y, inpoel)*FACTOR_STEP/dsqrt(g2)
 		do i = 1, size(mu_vec)
 		gg = gx_min*gx(i) + gy_min*gy(i)
 		if(gg < 0) then
@@ -207,11 +214,11 @@ contains
 		end do
 	end function get_step
 
-	function get_h_min(ipoin, npoin, X, Y, nelem, inpoel)
+	function get_h_min(ipoin, X, Y, inpoel)
 		use PointNeighbor, only: esup1, esup2
 		real*8 :: get_h_min
-		integer, intent(in) :: ipoin, npoin, nelem, inpoel(3,nelem)
-		real*8, intent(in) :: X(npoin), Y(npoin)
+		integer, intent(in) :: ipoin, inpoel(3,NELEM)
+		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%% 
 		integer :: iesup
 		real*8 :: X_loc(3), Y_loc(3)
@@ -267,10 +274,10 @@ contains
 		end do
 	end subroutine update_list
 
-	function get_mesh_quality(npoin, nelem, X, Y, inpoel)
+	function get_mesh_quality(X, Y, inpoel)
 		real*8 :: get_mesh_quality
-		integer, intent(in) :: npoin, nelem, inpoel(3,nelem)
-		real*8, intent(in) :: X(npoin), Y(npoin)
+		integer, intent(in) :: inpoel(3,NELEM)
+		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%% 
 		integer :: ielem
 		real*8 :: X_loc(3), Y_loc(3)
@@ -285,27 +292,24 @@ contains
 		end do
 	end function get_mesh_quality
 
-	subroutine check_smoothable(npoin, nelem, inpoel, X, Y, smoothable)
-		integer, intent(in) :: npoin, nelem, inpoel(3,nelem)
-		real*8, intent(in) :: X(npoin), Y(npoin) 
-		logical, intent(out) :: smoothable(npoin)
+	subroutine check_smoothable(inpoel, X, Y, smoothable)
+		integer, intent(in) :: inpoel(3,NELEM)
+		real*8, intent(in) :: X(NPOIN), Y(NPOIN) 
+		logical, intent(out) :: smoothable(NPOIN)
 		!%%%%%%%%%%%%%%%
-		integer :: ielem, inode, jpoin
+		integer :: ielem, jpoin
 		real*8 :: X_loc(3), Y_loc(3)
 		real*8 :: h1
 		!%%%%%%%%%%%%%%%
 		H_MIN_GLOBAL = 1
-		do ielem = 1, nelem
-		do inode = 1, 3
-		jpoin = inpoel(inode,ielem)
-		X_loc(inode) = X(jpoin)
-		Y_loc(inode) = Y(jpoin)
-		end do
-		if(mu(X_loc, Y_loc) < TOL_METRIC) then
-			smoothable(inpoel(:,ielem)) = .true.
-		end if
-		h1 = h(X_loc, Y_loc)
-		if(h1 < H_MIN_GLOBAL) H_MIN_GLOBAL = h1
-		end do
+		forall (ielem = 1:NELEM)
+			X_loc(:) = X(inpoel(:,ielem))
+			Y_loc(:) = Y(inpoel(:,ielem))
+			if(mu(X_loc, Y_loc) < TOL_METRIC) then
+				smoothable(inpoel(:,ielem)) = .true.
+			end if
+			h1 = h(X_loc, Y_loc)
+			if(h1 < H_MIN_GLOBAL) H_MIN_GLOBAL = h1
+		end forall
 	end subroutine check_smoothable
 end module smoothing_mod
