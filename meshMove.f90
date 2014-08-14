@@ -6,7 +6,7 @@ module MeshMove
     real(8), dimension(:, :), allocatable :: masa, c, k
     real(8), dimension(:), allocatable :: disn, diss, veln, vels, accn, accs, r, g, g1, f, cten
     real(8) fx(10), fy(10), rm(10), f_vx(10), f_vy(10)
-    real(8), dimension(:), allocatable :: xpos, ypos
+    real(8), dimension(:), allocatable :: xpos, ypos, x_aux, y_aux
 
 	private
 
@@ -29,7 +29,7 @@ subroutine setNewmarkCondition
     ALPHA = DISN(2)
 end subroutine setNewmarkCondition
 
-subroutine fluidStructure(dtmin)
+subroutine fluidStructure(dtmin, smooth_fix)
 	use MeshData
 	use Mlaplace
 	use mvelocidades
@@ -44,6 +44,8 @@ subroutine fluidStructure(dtmin)
 
 	if(.not. allocated(xpos)) allocate(xpos(npoin))
 	if(.not. allocated(ypos)) allocate(ypos(npoin))
+	if(.not. allocated(X_aux)) allocate(X_aux(npoin))
+	if(.not. allocated(Y_aux)) allocate(Y_aux(npoin))
 	if(.not. allocated(pos_aux)) allocate(pos_aux(npoin))
 	if(.not. allocated(dxpos)) allocate(dxpos(nmove))
 	if(.not. allocated(dypos)) allocate(dypos(nmove))
@@ -91,8 +93,8 @@ subroutine fluidStructure(dtmin)
              
 		!$omp parallel do private(ipoin)
 		do ipoin = 1, npoin
-			X(ipoin) = X(ipoin) + XPOS(ipoin)
-			W_X(ipoin) = XPOS(ipoin)/DTMIN
+			X_aux(ipoin) = X(ipoin) + XPOS(ipoin)
+			! W_X(ipoin) = XPOS(ipoin)/DTMIN
 		end do
 		!$omp end parallel do
      
@@ -113,10 +115,20 @@ subroutine fluidStructure(dtmin)
 	
 		!$omp parallel do private(ipoin)
 		do ipoin = 1, npoin
-			Y(ipoin) = Y(ipoin) + YPOS(ipoin)
-			W_Y(ipoin) = YPOS(ipoin)/DTMIN
+			Y_aux(ipoin) = Y(ipoin) + YPOS(ipoin)
+			! W_Y(ipoin) = YPOS(ipoin)/DTMIN
 		end do
 		!$omp end parallel do
+
+		call smoothing(X_aux, Y_aux, inpoel, fixed, npoin, nelem)
+
+		!$omp parallel do private(ipoin)
+		W_X(ipoin) = (X_aux(ipoin) - X(ipoin))/dtmin
+		X(ipoin) = X_aux(ipoin)
+		W_Y(ipoin) = (Y_aux(ipoin) - Y(ipoin))/dtmin
+		Y(ipoin) = Y_aux(ipoin)
+		!$omp end parallel do
+
 end subroutine
 
 subroutine allocateNewmark
