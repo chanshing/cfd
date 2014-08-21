@@ -3,45 +3,53 @@ module smoothing_mod
 	private
 	real*8, parameter :: TWOSQRT3 = 3.46410161513775d0
 	integer, parameter :: MAX_ELEM_PER_NODE = 20
-	integer, parameter :: NITER = 100, MITER = 2, NTRY = 4 
-	real*8, parameter :: TOL_METRIC = .7d0
-	real*8, parameter :: FACTOR_TOL_DIST = 1d-3
+	integer, parameter :: NITER = 10, MITER = 2, NTRY = 4 
+	real*8, parameter :: TOL_METRIC = .3D0
+	real*8, parameter :: FACTOR_TOL_DIST = 1d-2
 	real*8, parameter :: FACTOR_DELTA = 1d-2
 	real*8, parameter :: FACTOR_PLUS = 1.d0
-	real*8, parameter :: FACTOR_STEP = 3.d0
+	real*8, parameter :: FACTOR_STEP = 3d0
 	!%%%%%%%%%%%%%%%
 	integer :: NELEM, NPOIN
 	real*8 :: H_MIN_GLOBAL
 	logical, dimension(:), allocatable :: smoothable
 	public :: smoothing 
 contains
-	subroutine smoothing(X, Y, inpoel, fixed, npoin0, nelem0)
+	subroutine smoothing(X, Y, inpoel, fixed, npoin0, nelem0, doLaplacian)
 		integer, intent(in) :: npoin0, nelem0, inpoel(3,nelem0)
 		real*8, intent(inout) :: X(npoin0), Y(npoin0)
 		logical, intent(in) :: fixed(npoin0)
+		logical, optional, intent(in) :: doLaplacian
 		!%%%%%%%%%%%%%%%
 		integer :: iter, ipoin, min_idx
 		real*8 :: d_max, TOL_DIST
 		real*8, allocatable, dimension(:), save :: mu_vec
 		logical, save :: isFirstCall = .true.
+		integer, save :: counter = 0
+		integer, parameter :: PRINT_INTERVAL = 500
 		!%%%%%%%%%%%%%%%
+		counter = counter + 1
 		if(isFirstCall) then
+			NELEM = nelem0
+			NPOIN = npoin0
 			isFirstCall = .false.
 			allocate(mu_vec(MAX_ELEM_PER_NODE))
-			allocate(smoothable(npoin0))
+			allocate(smoothable(NPOIN))
 		end if
 		!%%%%%%%%%%%%%%%
-		NELEM = nelem0
-		NPOIN = npoin0
-		call checkMesh(inpoel, X, Y )
+		call checkMesh(inpoel, X, Y)
 		if(.not. any(smoothable == .true.)) return
-		do iter = 1, 2
-		call laplacianSmoothing(X, Y, fixed)
-		end do
+		if(present(doLaplacian)) then
+			if(doLaplacian) then
+				do iter = 1, 2
+				call laplacianSmoothing(X, Y, fixed, inpoel)
+				end do
+			end if
+		end if
 		TOL_DIST = FACTOR_TOL_DIST*H_MIN_GLOBAL
 		do iter = 1, NITER
 		d_max = 0.d0
-		do ipoin = 1, npoin0
+		do ipoin = 1, NPOIN
 		if(smoothable(ipoin) .and. .not. fixed(ipoin)) then
 			smoothable(ipoin) = .false. 
 			call getMu_vec(mu_vec, ipoin, inpoel, X, Y, min_idx)
@@ -52,32 +60,45 @@ contains
 		end do
 		if(d_max < TOL_DIST) exit
 		end do
-		print*, '=============SMOOTHING============='
-		print*, '# iteraciones:', iter
-		print*, 'Min Distortion Metric:', getMeshQuality(X, Y, inpoel)
-		print*, 'H_MIN_GLOBAL:', H_MIN_GLOBAL
-		print*, '==================================='
+		if(counter == PRINT_INTERVAL) then
+			counter = 0
+			print*, '=============SMOOTHING============='
+			print*, '# iteraciones:', iter
+			print*, 'Min Distortion Metric:', getMeshQuality(X, Y, inpoel)
+			print*, 'H_MIN_GLOBAL:', H_MIN_GLOBAL
+			print*, '==================================='
+		end if
 	end subroutine smoothing
 
-	subroutine laplacianSmoothing(X, Y, fixed)
-		use PointNeighbor, only: psup1, psup2
+	subroutine laplacianSmoothing(X, Y, fixed, inpoel)
+		use PointNeighbor!, only: psup1, psup2
+		integer, intent(in) :: inpoel(3,NELEM)
 		real*8, intent(inout) :: X(NPOIN), Y(NPOIN)
 		logical, intent(in) :: fixed(NPOIN)
 		!%%%%%%%%%%%%%%%
 		integer :: ipoin, ipsup, n
-		real*8 :: X_new, Y_new
+		real*8 :: X_sum, Y_sum, X_old, Y_old, mu_old
 		!%%%%%%%%%%%%%%%
+		if(.not.allocated(psup1) .or. .not.allocated(psup2)) call getPsup(inpoel, NELEM, NPOIN)
 		do ipoin = 1, NPOIN
-		X_new = 0
-		Y_new = 0
 		if(smoothable(ipoin) .and. .not. fixed(ipoin)) then
+			X_sum = 0
+			Y_sum = 0
+			mu_old = getMu_min(X, Y, ipoin, inpoel)
+			X_old = X(ipoin)
+			Y_old = Y(ipoin)
 			n = psup2(ipoin + 1) - psup2(ipoin)
 			do ipsup = psup2(ipoin) + 1, psup2(ipoin + 1)
-			X_new = X_new + X(psup1(ipsup))
-			Y_new = Y_new + Y(psup1(ipsup))
+			X_sum = X_sum + X(psup1(ipsup))
+			Y_sum = Y_sum + Y(psup1(ipsup))
 			end do
-			X(ipoin) = X_new/n
-			Y(ipoin) = Y_new/n
+			X(ipoin) = X_sum/n
+			Y(ipoin) = Y_sum/n
+			!IF WORSE, RESTORE
+			if(getMu_min(X, Y, ipoin, inpoel) < mu_old) then
+				X(ipoin) = X_old
+				Y(ipoin) = Y_old
+			end if
 		end if
 		end do
 	end subroutine laplacianSmoothing
@@ -85,7 +106,7 @@ contains
 	subroutine moveIpoin(X, Y, ipoin, inpoel, mu_vec, min_idx, d_max)
 		integer, intent(in) :: ipoin, inpoel(3,NELEM)
 		integer, intent(inout) :: min_idx
-		real*8, intent(inout) :: mu_vec(:)
+		real*8, intent(inout) :: mu_vec(MAX_ELEM_PER_NODE)
 		real*8, intent(inout) :: X(NPOIN), Y(NPOIN)
 		real*8, intent(inout) :: d_max
 		!%%%%%%%%%%%%%%%%%%%%
@@ -136,20 +157,21 @@ contains
 		!TRACK LARGEST DISTANCE MOVED
 		if(d_move > d_max) d_max = d_move
 		!IF MOVED, UPDATE LIST
-		if(d_move > tiny(1d0)) call update_list(ipoin)
+		if(d_move > tiny(1.d0)) call update_list(ipoin, inpoel)
 	end subroutine moveIpoin
 
 	subroutine getMu_vec(mu_vec, ipoin, inpoel, X, Y, min_idx)
-		use PointNeighbor, only: esup1, esup2
+		use PointNeighbor!, only: esup1, esup2
 		integer, intent(in) :: ipoin, inpoel(3,NELEM)
 		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
-		real*8, intent(out) :: mu_vec(:)
+		real*8, intent(out) :: mu_vec(MAX_ELEM_PER_NODE)
 		integer, optional, intent(out) :: min_idx
 		!%%%%%%%%%%%%%%%%%%%%
 		integer :: iesup
 		real*8 :: X_loc(3), Y_loc(3)
 		real*8 :: mu_min, mu1
 		!%%%%%%%%%%%%%%%%%%%%
+		if(.not.allocated(esup1) .or. .not.allocated(esup2)) call getEsup(inpoel, NELEM, NPOIN)
 		mu_min = 1
 		do iesup = esup2(ipoin) + 1, esup2(ipoin + 1)
 		X_loc(:) = X(inpoel(:, esup1(iesup)))
@@ -157,7 +179,7 @@ contains
 		mu1 = mu(X_loc, Y_loc)
 		mu_vec(iesup - esup2(ipoin)) = mu1
 		if(present(min_idx)) then
-			if(mu1 < mu_min) then
+			if(mu1 <= mu_min) then
 				mu_min = mu1
 				min_idx = iesup - esup2(ipoin)
 			end if
@@ -165,9 +187,29 @@ contains
 		end do
 	end subroutine getMu_vec
 
+	real*8 function getMu_min(X, Y, ipoin, inpoel)
+		use PointNeighbor
+		integer, intent(in) :: ipoin
+		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
+		integer, intent(in) :: inpoel(3,NELEM)
+		!%%%%%%%%%%%%%%%%%%%%
+		integer :: iesup
+		real*8 :: X_loc(3), Y_loc(3)
+		real*8 :: mu1
+		!%%%%%%%%%%%%%%%%%%%%
+		if(.not.allocated(esup1) .or. .not.allocated(esup2)) call getEsup(inpoel, NELEM, NPOIN)
+		getMu_min = 1
+		do iesup = esup2(ipoin) + 1, esup2(ipoin + 1)
+		X_loc(:) = X(inpoel(:, esup1(iesup)))
+		Y_loc(:) = Y(inpoel(:, esup1(iesup)))
+		mu1 = mu(X_loc, Y_loc)
+		if(mu1 <= getMu_min) getMu_min = mu1
+		end do
+	end function
+
 	subroutine getG(gx, gy, ipoin, inpoel, X, Y, mu_vec)
 		integer, intent(in) :: ipoin, inpoel(3,NELEM)
-		real*8, intent(in) :: mu_vec(:)
+		real*8, intent(in) :: mu_vec(MAX_ELEM_PER_NODE)
 		real*8, intent(inout) :: X(NPOIN), Y(NPOIN) 
 		real*8, intent(out) :: gx(:), gy(:)
 		!%%%%%%%%%%%%%%%%%%%%
@@ -189,10 +231,9 @@ contains
 		Y(ipoin) = y_old
 	end subroutine getG
 
-	function getStep(gx, gy, mu_vec, min_idx, ipoin, X, Y, inpoel)
-		use PointNeighbor, only: esup1, esup2
-		real*8 :: getStep
-		real*8, intent(in) :: gx(:), gy(:), mu_vec(:)
+	real*8 function getStep(gx, gy, mu_vec, min_idx, ipoin, X, Y, inpoel)
+		use PointNeighbor!, only: esup1, esup2
+		real*8, intent(in) :: gx(:), gy(:), mu_vec(MAX_ELEM_PER_NODE)
 		integer, intent(in) :: min_idx, ipoin, inpoel(3,NELEM)
 		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%%
@@ -200,6 +241,7 @@ contains
 		real*8 :: gx_min, gy_min, mu_min
 		integer :: i
 		!%%%%%%%%%%%%%%%%%%%%
+		if(.not.allocated(esup1) .or. .not.allocated(esup2)) call getEsup(inpoel, NELEM, NPOIN)
 		gx_min = gx(min_idx)
 		gy_min = gy(min_idx)
 		mu_min = mu_vec(min_idx)
@@ -214,9 +256,8 @@ contains
 		end do
 	end function getStep
 
-	function getH_min(ipoin, X, Y, inpoel)
-		use PointNeighbor, only: esup1, esup2
-		real*8 :: getH_min
+	real*8 function getH_min(ipoin, X, Y, inpoel)
+		use PointNeighbor!, only: esup1, esup2
 		integer, intent(in) :: ipoin, inpoel(3,NELEM)
 		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%% 
@@ -224,6 +265,7 @@ contains
 		real*8 :: X_loc(3), Y_loc(3)
 		real*8 :: h1
 		!%%%%%%%%%%%%%%%%%%%% 
+		if(.not.allocated(esup1) .or. .not.allocated(esup2)) call getEsup(inpoel, NELEM, NPOIN)
 		getH_min = 1
 		do iesup = esup2(ipoin) + 1, esup2(ipoin + 1)
 		X_loc(:) = X(inpoel(:,esup1(iesup)))
@@ -233,21 +275,22 @@ contains
 		end do
 	end function getH_min
 
-	subroutine update_list(ipoin)
-		use PointNeighbor, only: psup1, psup2
-		integer, intent(in) :: ipoin
+	subroutine update_list(ipoin, inpoel)
+		use PointNeighbor!, only: psup1, psup2
+		integer, intent(in) :: ipoin, inpoel(3,NELEM)
 		!%%%%%%%%%%%%%%%%%%%%
 		integer :: ipsup
 		!%%%%%%%%%%%%%%%%%%%%
+		if(.not.allocated(psup1) .or. .not.allocated(psup2)) call getPsup(inpoel, NELEM, NPOIN)
 		forall (ipsup = psup2(ipoin) + 1 : psup2(ipoin + 1))
 			smoothable(psup1(ipsup)) = .true.
 		end forall
 	end subroutine update_list
 
-	pure function mu(X_loc, Y_loc)
+	pure real*8 function mu(X_loc, Y_loc)
 		real*8, intent(in) :: X_loc(:), Y_loc(:)
 		!%%%%%%%%%%%%%%%%%%%%
-		real*8 :: l1, l2, l3, l, area, mu
+		real*8 :: l1, l2, l3, l, area
 		!%%%%%%%%%%%%%%%%%%%%
 		area = X_loc(2)*Y_loc(3)+X_loc(3)*Y_loc(1)+X_loc(1)*Y_loc(2) &
 			-(X_loc(2)*Y_loc(1)+X_loc(3)*Y_loc(2)+X_loc(1)*Y_loc(3))
@@ -258,10 +301,10 @@ contains
 		mu = TWOSQRT3*area/l
 	end function mu
 
-	pure function h(X_loc, Y_loc)
+	pure real*8 function h(X_loc, Y_loc)
 		real*8, intent(in) :: X_loc(:), Y_loc(:)
 		!%%%%%%%%%%%%%%%%%%%%
-		real*8 :: d1, d2, d3, d, area, h
+		real*8 :: d1, d2, d3, d, area
 		!%%%%%%%%%%%%%%%%%%%%
 		area = X_loc(2)*Y_loc(3) + X_loc(3)*Y_loc(1) + X_loc(1)*Y_loc(2) &
 			-(X_loc(2)*Y_loc(1) + X_loc(3)*Y_loc(2) + X_loc(1)*Y_loc(3))
@@ -273,8 +316,7 @@ contains
 		h = dabs(area)/d
 	end function h
 
-	pure function getMeshQuality(X, Y, inpoel)
-		real*8 :: getMeshQuality
+	pure real*8 function getMeshQuality(X, Y, inpoel)
 		integer, intent(in) :: inpoel(3,NELEM)
 		real*8, intent(in) :: X(NPOIN), Y(NPOIN)
 		!%%%%%%%%%%%%%%%%%%%% 
