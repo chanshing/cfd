@@ -1,25 +1,28 @@
 module smoothing_mod
 	implicit none
+	save
 	private
 	real*8, parameter :: TWOSQRT3 = 3.46410161513775d0
 	integer, parameter :: MAX_ELEM_PER_NODE = 20
-	integer, parameter :: NITER = 10, MITER = 2, NTRY = 4 
-	real*8, parameter :: TOL_METRIC = .3D0
+	integer, parameter :: NITER = 100, MITER = 2, NTRY = 8
+	real*8, parameter :: TOL_METRIC = .85D0
 	real*8, parameter :: FACTOR_TOL_DIST = 1d-2
 	real*8, parameter :: FACTOR_DELTA = 1d-2
 	real*8, parameter :: FACTOR_PLUS = 1.d0
-	real*8, parameter :: FACTOR_STEP = 3d0
+	real*8, parameter :: FACTOR_STEP = 3.d0
 	!%%%%%%%%%%%%%%%
 	integer :: NELEM, NPOIN
 	real*8 :: H_MIN_GLOBAL
 	logical, dimension(:), allocatable :: smoothable
-	public :: smoothing 
+	real*8, dimension(:), allocatable :: tol_move
+	logical, save :: SWITCH_TOL_MOVE = .false.
+	public :: smoothing, setTol_move
 contains
-	subroutine smoothing(X, Y, inpoel, fixed, npoin0, nelem0, doLaplacian)
+	subroutine smoothing(X, Y, inpoel, fixed, npoin0, nelem0, dX, dY)
 		integer, intent(in) :: npoin0, nelem0, inpoel(3,nelem0)
 		real*8, intent(inout) :: X(npoin0), Y(npoin0)
 		logical, intent(in) :: fixed(npoin0)
-		logical, optional, intent(in) :: doLaplacian
+		real*8, intent(in), optional :: dX(npoin), dY(npoin)
 		!%%%%%%%%%%%%%%%
 		integer :: iter, ipoin, min_idx
 		real*8 :: d_max, TOL_DIST
@@ -32,20 +35,18 @@ contains
 		if(isFirstCall) then
 			NELEM = nelem0
 			NPOIN = npoin0
-			isFirstCall = .false.
 			allocate(mu_vec(MAX_ELEM_PER_NODE))
 			allocate(smoothable(NPOIN))
+			counter = PRINT_INTERVAL
+			isFirstCall = .false.
 		end if
 		!%%%%%%%%%%%%%%%
 		call checkMesh(inpoel, X, Y)
 		if(.not. any(smoothable == .true.)) return
-		if(present(doLaplacian)) then
-			if(doLaplacian) then
-				do iter = 1, 2
-				call laplacianSmoothing(X, Y, fixed, inpoel)
-				end do
-			end if
-		end if
+		if(present(dX).and.present(dY)) call setTol_move(dX, dY)
+		do iter = 1, 2
+		call laplacianSmoothing(X, Y, fixed, inpoel)
+		end do
 		TOL_DIST = FACTOR_TOL_DIST*H_MIN_GLOBAL
 		do iter = 1, NITER
 		d_max = 0.d0
@@ -75,25 +76,34 @@ contains
 		integer, intent(in) :: inpoel(3,NELEM)
 		real*8, intent(inout) :: X(NPOIN), Y(NPOIN)
 		logical, intent(in) :: fixed(NPOIN)
-		!%%%%%%%%%%%%%%%
+		!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		integer :: ipoin, ipsup, n
-		real*8 :: X_sum, Y_sum, X_old, Y_old, mu_old
-		!%%%%%%%%%%%%%%%
-		if(.not.allocated(psup1) .or. .not.allocated(psup2)) call getPsup(inpoel, NELEM, NPOIN)
+		real*8 :: X_new, Y_new, X_old, Y_old, dX, dY, mu_old
+		!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		if(.not.allocated(psup1).or..not.allocated(psup2)) call getPsup(inpoel, NELEM, NPOIN)
 		do ipoin = 1, NPOIN
-		if(smoothable(ipoin) .and. .not. fixed(ipoin)) then
-			X_sum = 0
-			Y_sum = 0
+		if(smoothable(ipoin).and..not.fixed(ipoin)) then
+			X_new = 0
+			Y_new = 0
 			mu_old = getMu_min(X, Y, ipoin, inpoel)
 			X_old = X(ipoin)
 			Y_old = Y(ipoin)
 			n = psup2(ipoin + 1) - psup2(ipoin)
 			do ipsup = psup2(ipoin) + 1, psup2(ipoin + 1)
-			X_sum = X_sum + X(psup1(ipsup))
-			Y_sum = Y_sum + Y(psup1(ipsup))
+			X_new = X_new + X(psup1(ipsup))
+			Y_new = Y_new + Y(psup1(ipsup))
 			end do
-			X(ipoin) = X_sum/n
-			Y(ipoin) = Y_sum/n
+			X_new = X_new/n
+			Y_new = Y_new/n
+			if(SWITCH_TOL_MOVE) then
+				dX = X_new - X(ipoin)
+				dY = Y_new - Y(ipoin)
+				X(ipoin) = X(ipoin) + dX/(dabs(dX) + dabs(dY))*tol_move(ipoin)/2*FACTOR_STEP
+				Y(ipoin) = Y(ipoin) + dY/(dabs(dX) + dabs(dY))*tol_move(ipoin)/2*FACTOR_STEP
+			else
+				X(ipoin) = X_new
+				Y(ipoin) = Y_new
+			end if
 			!IF WORSE, RESTORE
 			if(getMu_min(X, Y, ipoin, inpoel) < mu_old) then
 				X(ipoin) = X_old
@@ -172,6 +182,7 @@ contains
 		real*8 :: mu_min, mu1
 		!%%%%%%%%%%%%%%%%%%%%
 		if(.not.allocated(esup1) .or. .not.allocated(esup2)) call getEsup(inpoel, NELEM, NPOIN)
+		if(present(min_idx)) min_idx = 1
 		mu_min = 1
 		do iesup = esup2(ipoin) + 1, esup2(ipoin + 1)
 		X_loc(:) = X(inpoel(:, esup1(iesup)))
@@ -179,7 +190,7 @@ contains
 		mu1 = mu(X_loc, Y_loc)
 		mu_vec(iesup - esup2(ipoin)) = mu1
 		if(present(min_idx)) then
-			if(mu1 <= mu_min) then
+			if(mu1 < mu_min) then
 				mu_min = mu1
 				min_idx = iesup - esup2(ipoin)
 			end if
@@ -246,7 +257,11 @@ contains
 		gy_min = gy(min_idx)
 		mu_min = mu_vec(min_idx)
 		g2 = gx_min**2 + gy_min**2
-		getStep = getH_min(ipoin, X, Y, inpoel)*FACTOR_STEP/(dabs(gx_min) + dabs(gy_min))
+		if(SWITCH_TOL_MOVE) then
+			getStep = tol_move(ipoin)/((dabs(gx_min) + dabs(gy_min))*NITER)
+		else
+			getStep = getH_min(ipoin, X, Y, inpoel)*FACTOR_STEP/(dabs(gx_min) + dabs(gy_min))
+		end if
 		do i = 1, esup2(ipoin + 1) - esup2(ipoin)
 		gg = gx_min*gx(i) + gy_min*gy(i)
 		if(gg < 0) then
@@ -336,11 +351,11 @@ contains
 	subroutine checkMesh(inpoel, X, Y)
 		integer, intent(in) :: inpoel(3,NELEM)
 		real*8, intent(in) :: X(NPOIN), Y(NPOIN) 
-		!%%%%%%%%%%%%%%%
+		!%%%%%%%%%%%%%%%%%%%%%%%%%
 		integer :: ielem
 		real*8 :: X_loc(3), Y_loc(3)
 		real*8 :: h1
-		!%%%%%%%%%%%%%%%
+		!%%%%%%%%%%%%%%%%%%%%%%%%%
 		H_MIN_GLOBAL = 1
 		smoothable(:) = .false.
 		do ielem = 1, NELEM
@@ -353,4 +368,20 @@ contains
 		if(h1 < H_MIN_GLOBAL) H_MIN_GLOBAL = h1
 		end do
 	end subroutine checkMesh
+
+	subroutine setTol_move(dX, dY)
+		real*8, dimension(:), intent(in) :: dX, dY
+		!%%%%%%%%%%%%%%%%%%%%%%%%%
+		integer :: ipoin, npoin
+		!%%%%%%%%%%%%%%%%%%%%%%%%%
+		npoin = size(dX)
+		if(.not.allocated(tol_move)) allocate(tol_move(npoin))
+		!%%%%%%%%%%%%%%%%%%%%%%%%%
+		SWITCH_TOL_MOVE = .true.
+		!$OMP PARALLEL DO PRIVATE(ipoin)
+		do ipoin = 1, npoin
+		tol_move(ipoin) = dabs(dX(ipoin)) + dabs(dY(ipoin))
+		end do
+		!$OMP END PARALLEL DO
+	end subroutine setTol_move
 end module smoothing_mod

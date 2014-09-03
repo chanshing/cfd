@@ -4,7 +4,7 @@ module InputData
 !------------------------------------------------
     real(8) U_inf, V_inf, T_inf, RHO_inf, MACH_inf, P_inf, C_inf
     real(8) FR, FMU, FGX, FGY, QH, FK, FCv, GAMA
-	real(8) XREF, YREF
+	real(8) XREF(10), YREF(10)
 	real(8) FSAFE, CTE
     real(8) ETA_REFIN, HHMAX_REFIN, HHMIN_REFIN
 	integer IRESTART, MAXITER, IPRINT, MOVIE, ITLOCAL, MOVING
@@ -42,7 +42,7 @@ subroutine readInputData
     !CCCC  -----> ALE
     read(1, *)
     read(1, *)
-    read(1, *) MOVING, XREF, YREF
+    read(1, *) MOVING, XREF(1), YREF(1)
     !CCCC  -----> IMPRESION DE RESULTADOS SEGUN AGUSTIN
     read(1, *)
     read(1, *)
