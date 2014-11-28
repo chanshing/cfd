@@ -1,6 +1,6 @@
 cfd
 ===
-Author: Shing Chan, German Weht & Agustin Figueroa
+Authors: Shing Chan, Alejandro Agustin Figueroa & German Weht
 
 Solver for Navier Stokes equations with a Streamline Upwind Petrov-Galerkin formulation on a 2D unstructured mesh, 
 based on Tayfun E. Tezduyar and Masayoshi Senga, "Stabilization and shock-capturing parameters
