@@ -1,6 +1,6 @@
 cfd
 ===
-By Shing Chan, Alejandro Agustin Figueroa & German Weht.
+Authors: Shing Chan, Alejandro Agustin Figueroa & German Weht.
 
 Instituto Universitario Aeronautico, Cordoba - Argentina.
 
